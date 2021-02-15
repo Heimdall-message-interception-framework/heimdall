@@ -4,7 +4,7 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(scheduler).
+-module(naive_same_payload_scheduler).
 
 -behaviour(gen_server).
 
@@ -16,18 +16,19 @@
 
 -record(state, {
   message_interception_layer_id :: pid(),
-  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}]
+  messages_in_transit = [] :: [{From::pid(), To::pid(), Msg::any()}],
+  standard_payload :: any()
 }).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(MIL) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL], []).
+start(StandardPayload) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [StandardPayload], []).
 
-init([MIL]) ->
-  {ok, #state{message_interception_layer_id = MIL}}.
+init([StandardPayload]) ->
+  {ok, #state{standard_payload = StandardPayload}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
@@ -35,12 +36,11 @@ handle_call(_Request, _From, State = #state{}) ->
 handle_cast({new_events, ListNewMessages}, State = #state{}) ->
   UpdatedMessages = State#state.messages_in_transit ++ ListNewMessages,
   MsgUpdatedState = State#state{messages_in_transit = UpdatedMessages},
-%%  compute next event to schedule
   {NextState, {KindEvent, ActualEvent}} = next_event_and_state(MsgUpdatedState),
-  erlang:display("we got here"),
-%% TODO:  depending on kind_event, take corresponding actions
   gen_server:cast(State#state.message_interception_layer_id, {KindEvent, ActualEvent}),
-  {noreply, State#state{messages_in_transit = NextState}}.
+  {noreply, NextState};
+handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
+  {noreply, State#state{message_interception_layer_id = MIL}}.
 
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.
@@ -58,6 +58,11 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element
-  [{F, T, M} | Tail] = State#state.messages_in_transit,
-  {State#state{messages_in_transit = Tail}, {send, {F, T, M}}}.
+  if
+    length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
+    true ->
+      [{ID,_,_,_} | Tail] = State#state.messages_in_transit,
+      {State#state{messages_in_transit = Tail}, {send_altered, {ID, State#state.standard_payload}}}
+  end.
+
 

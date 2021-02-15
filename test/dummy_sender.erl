@@ -4,34 +4,35 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(client_node).
+-module(dummy_sender).
 
 -behaviour(gen_server).
 
--export([start/1]).
+-export([start/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+  message_collector_id :: pid()
+}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Name) ->
-  gen_server:start_link({local, Name}, ?MODULE, [], []).
+start(Name, MessageCollector) ->
+  gen_server:start_link({local, Name}, ?MODULE, [MessageCollector], []).
 
-init([]) ->
-  {ok, #state{}}.
+init([MessageCollector]) ->
+  {ok, #state{message_collector_id = MessageCollector}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
-handle_cast({client_req, MessageCollector, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-%%  currently, we do NOT by-pass MsgCollector
-  gen_server:cast(MessageCollector, {client_req, ClientName, Coordinator, ClientCmd}),
+handle_cast({send_N_messages_with_interval, {N, To, Interval}}, State = #state{}) ->
+  send_N_messages_with_interval(State, N, To, Interval),
   {noreply, State}.
 
 handle_info(_Info, State = #state{}) ->
@@ -46,3 +47,11 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+send_N_messages_with_interval(State, N, To, Interval) ->
+  if
+    N > 0 -> gen_server:cast(State#state.message_collector_id, {send, self(), To, N}),
+      timer:sleep(Interval),
+      send_N_messages_with_interval(State, N-1, To, Interval);
+    N == 0 -> gen_server:cast(State#state.message_collector_id, {send, self(), To, N})
+  end.

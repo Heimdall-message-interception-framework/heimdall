@@ -17,7 +17,8 @@
 -record(state, {
   message_interception_layer_id :: pid(),
   message_sender_id :: pid(),
-  messages_in_transit = [] :: [{From::pid(), To::pid(), Msg::any()}]
+  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
+  id_counter = 0 :: any()
 }).
 
 %%%===================================================================
@@ -30,7 +31,6 @@
 start(MIL, S_id) ->
   gen_server:start_link(?MODULE, [MIL, S_id], []).
 
-
 init([MIL, S_id]) ->
   {ok, #state{message_interception_layer_id = MIL, message_sender_id = S_id}}.
 
@@ -38,12 +38,16 @@ handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
 handle_cast({send, From, To, Payload}, State = #state{}) ->
-  Updated_messages_in_transit = State#state.messages_in_transit ++ [{From, To, Payload}],
+  Updated_messages_in_transit = State#state.messages_in_transit ++ [{State#state.id_counter, From, To, Payload}],
+  NextID = State#state.id_counter + 1,
 %%  if whitelisted forward to message_sender and log from here?
   _Bool_whitelisted = check_if_whitelisted(From, To, Payload),
-  {noreply, State#state{messages_in_transit = Updated_messages_in_transit}};
+  {noreply, State#state{messages_in_transit = Updated_messages_in_transit, id_counter = NextID}};
+handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
+%%  TODO: this is a hard-coded whitelist for client request; generalise by recognising client processes as senders e.g.
+  gen_server:cast(State#state.message_sender_id, {client_req, ClientName, Coordinator, ClientCmd}),
+  {noreply, State};
 handle_cast({get_since_last}, State) ->
-  erlang:display("get since last start"),
   gen_server:cast(State#state.message_interception_layer_id, {new_events, State#state.messages_in_transit}),
   {noreply, State#state{messages_in_transit = []}}.
 

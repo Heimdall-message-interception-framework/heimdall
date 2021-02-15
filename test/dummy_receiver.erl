@@ -4,35 +4,38 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(client_node).
+-module(dummy_receiver).
 
 -behaviour(gen_server).
 
--export([start/1]).
+-export([start_link/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+  received_messages = [] :: [{From::pid(), To::pid(), Msg::any()}]
+}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Name) ->
+start_link(Name) ->
   gen_server:start_link({local, Name}, ?MODULE, [], []).
 
 init([]) ->
   {ok, #state{}}.
 
-handle_call(_Request, _From, State = #state{}) ->
-  {reply, ok, State}.
+%% only payloads for readability
+handle_call({get_received_payloads}, _From, State = #state{}) ->
+  ReceivedPayloads = [P || {_, _, P} <- State#state.received_messages],
+  {reply, ReceivedPayloads, State}.
 
-handle_cast({client_req, MessageCollector, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-%%  currently, we do NOT by-pass MsgCollector
-  gen_server:cast(MessageCollector, {client_req, ClientName, Coordinator, ClientCmd}),
-  {noreply, State}.
+handle_cast({message, From, To, Payload}, State = #state{}) ->
+  UpdatedMessages = State#state.received_messages ++ [{From, To, Payload}],
+  {noreply, State#state{received_messages = UpdatedMessages}}.
 
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.

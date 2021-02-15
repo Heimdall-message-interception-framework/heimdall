@@ -4,7 +4,7 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(message_sender).
+-module(naive_scheduler).
 
 -behaviour(gen_server).
 
@@ -14,7 +14,10 @@
 
 -define(SERVER, ?MODULE).
 
--record(state, {}).
+-record(state, {
+  message_interception_layer_id :: pid(),
+  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}]
+}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
@@ -29,14 +32,14 @@ init([]) ->
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
-handle_cast({send, From, To, Payload}, State = #state{}) ->
-%%  TODO: change once wrapper API is defined
-  gen_server:cast(To, {message, From, To, Payload}),
-  {noreply, State};
-handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-%%  TODO: change once wrapper API is defined
-  gen_server:cast(Coordinator, {message, ClientName, Coordinator, ClientCmd}),
-  {noreply, State}.
+handle_cast({new_events, ListNewMessages}, State = #state{}) ->
+  UpdatedMessages = State#state.messages_in_transit ++ ListNewMessages,
+  MsgUpdatedState = State#state{messages_in_transit = UpdatedMessages},
+  {NextState, {KindEvent, ActualEvent}} = next_event_and_state(MsgUpdatedState),
+  gen_server:cast(State#state.message_interception_layer_id, {KindEvent, ActualEvent}),
+  {noreply, NextState};
+handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
+  {noreply, State#state{message_interception_layer_id = MIL}}.
 
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.
@@ -50,3 +53,15 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
+
+
+next_event_and_state(State) ->
+%% this one simply returns the first element
+  if
+    length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
+    true ->
+      [{ID,_,_,_} | Tail] = State#state.messages_in_transit,
+      {State#state{messages_in_transit = Tail}, {send, {ID}}}
+  end.
+
+

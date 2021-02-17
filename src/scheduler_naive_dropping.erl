@@ -4,11 +4,11 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(naive_same_payload_scheduler).
+-module(scheduler_naive_dropping).
 
 -behaviour(gen_server).
 
--export([start/1]).
+-export([start/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -16,19 +16,18 @@
 
 -record(state, {
   message_interception_layer_id :: pid(),
-  messages_in_transit = [] :: [{From::pid(), To::pid(), Msg::any()}],
-  standard_payload :: any()
+  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}]
 }).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(StandardPayload) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [StandardPayload], []).
+start() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-init([StandardPayload]) ->
-  {ok, #state{standard_payload = StandardPayload}}.
+init([]) ->
+  {ok, #state{}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
@@ -61,8 +60,11 @@ next_event_and_state(State) ->
   if
     length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
     true ->
-      [{ID,_,_,_} | Tail] = State#state.messages_in_transit,
-      {State#state{messages_in_transit = Tail}, {send_altered, {ID, State#state.standard_payload}}}
+      [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
+      if
+        M == 5 -> {State#state{messages_in_transit = Tail}, {drop, {ID,F,T}}};
+        true -> {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
+      end
   end.
 
 

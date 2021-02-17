@@ -15,7 +15,7 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-  message_collector_id :: pid()
+  message_interception_layer_id :: pid()
 }).
 
 %%%===================================================================
@@ -26,7 +26,7 @@ start(Name, MessageCollector) ->
   gen_server:start_link({local, Name}, ?MODULE, [MessageCollector], []).
 
 init([MessageCollector]) ->
-  {ok, #state{message_collector_id = MessageCollector}}.
+  {ok, #state{message_interception_layer_id = MessageCollector}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
@@ -50,8 +50,8 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 send_N_messages_with_interval(State, N, To, Interval) ->
   if
-    N > 0 -> gen_server:cast(State#state.message_collector_id, {send, self(), To, N}),
+    N > 0 -> gen_server:cast(State#state.message_interception_layer_id, {bang, {self(), To, N}}),
       timer:sleep(Interval),
       send_N_messages_with_interval(State, N-1, To, Interval);
-    N == 0 -> gen_server:cast(State#state.message_collector_id, {send, self(), To, N})
+    N == 0 -> gen_server:cast(State#state.message_interception_layer_id, {bang, {self(), To, N}})
   end.

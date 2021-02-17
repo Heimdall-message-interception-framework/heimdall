@@ -4,7 +4,7 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(naive_scheduler).
+-module(scheduler_naive_transient_fault).
 
 -behaviour(gen_server).
 
@@ -56,12 +56,19 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 
 next_event_and_state(State) ->
-%% this one simply returns the first element
+%% this one simply returns the first element for 3 messages,
+%% afterwards it fails the process
   if
     length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
-    true ->
-      [{ID,_,_,_} | Tail] = State#state.messages_in_transit,
-      {State#state{messages_in_transit = Tail}, {send, {ID}}}
+    true -> [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
+      if
+        M == 7 ->
+          FilteredMessages = lists:filter(fun({_,_,To,_}) -> To /= T end, Tail),
+          {State#state{messages_in_transit = FilteredMessages}, {crash_trans, {T}}};
+        true ->
+          {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
+      end
   end.
+
 
 

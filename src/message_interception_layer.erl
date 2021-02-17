@@ -73,21 +73,32 @@ handle_cast({new_events, List_of_new_messages}, State = #state{}) ->
 handle_cast({noop, {}}, State = #state{}) -> % use IDs here later
   restart_timer(),
   {noreply, State};
-handle_cast({send, {Id}}, State = #state{}) -> % use IDs here later
-  [{ID, F,T,M} | _] = [{ID, F,T,M} || {ID, F,T,M} <- State#state.messages_in_transit, ID == Id],
-  send_msg(State, F, T, M),
-%%  TODO: record the send event and ID
+handle_cast({crash_trans, {Node}}, State = #state{}) -> % use IDs here later
+  UpdatedCrashTrans = State#state.transient_crashed_nodes ++ [Node],
   restart_timer(),
-  {noreply, State};
+  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}};
+handle_cast({send, {Id}}, State = #state{}) -> % use IDs here later
+  [{_, F,T,M} | _] = [{ID,F,T,M} || {ID,F,T,M} <- State#state.messages_in_transit, ID == Id],
+  send_msg(State, F, T, M),
+  logger:info("sent some message"),
+%%  TODO: record the send event and ID
+  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
+  restart_timer(),
+  {noreply, State#state{messages_in_transit = UpdatedMessages}};
 handle_cast({send_altered, {Id, New_payload}}, State = #state{}) ->
 %%  omitted parameters from and to since id uniquely determines msg exchange
-  [{ID,F,T,_} | _] = [{ID,F,T,M} || {ID,F,T,M} <- State#state.messages_in_transit, ID == Id],
+  [{_,F,T,_} | _] = [{ID,F,T,M} || {ID,F,T,M} <- State#state.messages_in_transit, ID == Id],
   send_msg(State, F, T, New_payload),
 %%  TODO: record the send event with changes and ID
+  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
   restart_timer(),
-  {noreply, State};
+  {noreply, State#state{messages_in_transit = UpdatedMessages}};
+handle_cast({drop, {Id}}, State = #state{}) -> % use IDs here later
+  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
+  restart_timer(),
+  {noreply, State#state{messages_in_transit = UpdatedMessages}};
 handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-%%  TODO: submit the request to be executed by one of the clients; we should specify which node to answer
+%%  TODO: submit the request to be executed by one of the clients; Coordinator is the node to contact
   gen_server:cast(client_pid(State, ClientName), {client_req, State#state.message_collector_id, ClientName, Coordinator, ClientCmd}),
 %%  TODO: record the client request
   restart_timer(),

@@ -8,7 +8,7 @@
 -include_lib("eunit/include/eunit.hrl").
 
 
-mil_naive_scheduler_tests() ->
+mil_naive_scheduler_test() ->
   {ok, Scheduler} = naive_scheduler:start(),
   {ok, MIL, MessageCollector} = message_interception_layer:start(Scheduler, []),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -46,7 +46,8 @@ mil_naive_same_payload_scheduler_tests() ->
   ?assertEqual(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
 
 
-mil_client_req_test() ->
+mil_client_req_tests() ->
+%%  TODO: clean
   {ok, Scheduler} = naive_same_payload_scheduler:start(1),
   {ok, MIL, _} = message_interception_layer:start(Scheduler, [client1]),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -56,4 +57,17 @@ mil_client_req_test() ->
   timer:sleep(100),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ?assertEqual(ReceivedMessages1, ["client_req"]).
+
+mil_drop_tests() ->
+  {ok, Scheduler} = naive_dropping_scheduler:start(),
+  {ok, MIL, MessageCollector} = message_interception_layer:start(Scheduler, []),
+  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
+  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
+  {ok, DummySender1} = dummy_sender:start(ds1, MessageCollector),
+  gen_server:cast(MIL, {start}),
+%%  send the messages
+  gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
+  timer:sleep(2500),
+  ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
+  ?assertEqual(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
 

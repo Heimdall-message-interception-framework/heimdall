@@ -60,6 +60,9 @@ handle_call(_Request, _From, State = #state{}) ->
 
 handle_cast({start}, State = #state{}) ->
   erlang:send_after(?INTERVAL, self(), trigger_get_events),
+  logger:notice("this should be somewhere."),
+  logger:warning("this should be somewhere."),
+  logger:emergency("this should be somewhere."),
   {noreply, State};
 %%
 handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->

@@ -42,8 +42,7 @@ mil_naive_scheduler_test(_Config) ->
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
   assert_equal(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
-  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]),
-  ok.
+  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]).
 
 
 mil_naive_same_payload_scheduler_test(_Config) ->

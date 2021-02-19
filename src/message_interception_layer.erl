@@ -17,12 +17,14 @@
 
 -record(state, {
 %%  possibly fsm_state to check protocol
-  registered_nodes :: orddict:orddict(Name::atom(), pid()),
+  registered_nodes = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   client_nodes :: orddict:orddict(Name::atom(), pid()),
   transient_crashed_nodes = sets:new() :: sets:set(atom()),
 %%  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
-  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
-  new_messages_in_transit = [],
+%%  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
+  messages_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
+                                        queue:queue({ID::any(), Payload::any()})),
+  new_messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
   message_sender_id :: pid(),
   scheduler_id :: pid(),
   id_counter = 0 :: any()
@@ -37,6 +39,7 @@ start(Scheduler, ClientNames) ->
   {ok, MIL}.
 
 init([Scheduler, ClientNames]) ->
+%%  TODO: change to orddict
   ClientNodes = lists:map(fun(Name) ->
                             {ok, Pid} = client_node:start(Name, self()),
                             {Name, Pid}
@@ -59,6 +62,17 @@ handle_cast({start}, State = #state{}) ->
   erlang:send_after(?INTERVAL, self(), trigger_get_events),
   {noreply, State};
 %%
+handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->
+  NewRegisteredNodes = orddict:store(NodeName, NodePid, State#state.registered_nodes),
+%%  TODO: add a queue for every new pair due to the registered node but on (not lazy because of broadcasting)
+  AllOtherPids = get_all_node_pids(State),
+  ListNewQueues = [{{Other, NodePid}, queue:new()} || Other <- AllOtherPids] ++
+                  [{{NodePid, Other}, queue:new()} || Other <- AllOtherPids],
+  OrddictNewQueues = orddict:from_list(ListNewQueues),
+  Fun = fun({F, T}, V, _) -> undefined end,
+  NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, OrddictNewQueues),
+  {noreply, State#state{registered_nodes = NewRegisteredNodes, messages_in_transit = NewMessageStore}};
+%%
 handle_cast({bang, {From, To, Payload}}, State = #state{}) ->
   Bool_crashed = check_if_crashed(State, To),
   Bool_whitelisted = check_if_whitelisted(From, To, Payload),
@@ -67,7 +81,10 @@ handle_cast({bang, {From, To, Payload}}, State = #state{}) ->
     Bool_whitelisted -> send_msg(State, From, To, Payload),
                         {noreply, State};
     true ->
-      UpdatedMessagesInTransit = State#state.messages_in_transit ++ [{State#state.id_counter, From, To, Payload}],
+%%      TODO: if this works, add own method for this
+      QueueToUpdate = orddict:fetch({From, To}, State#state.messages_in_transit),
+      UpdatedQueue = queue:in({State#state.id_counter, Payload}, QueueToUpdate),
+      UpdatedMessagesInTransit = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),
       UpdatedNewMessagesInTransit = State#state.new_messages_in_transit ++ [{State#state.id_counter, From, To, Payload}],
       NextID = State#state.id_counter + 1,
       {noreply, State#state{messages_in_transit = UpdatedMessagesInTransit,
@@ -80,25 +97,22 @@ handle_cast({noop, {}}, State = #state{}) ->
 %%
 %% for queues, having From and To would help
 handle_cast({send, {Id, From, To}}, State = #state{}) ->
-%%  TODO: search in corresponding queue for ID
-  [{_, F,T,M} | _] = [{ID,F,T,M} || {ID,F,T,M} <- State#state.messages_in_transit, ID == Id],
-  send_msg(State, F, T, M),
-%%  TODO: record the send event and ID
-  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
-  {noreply, State#state{messages_in_transit = UpdatedMessages}};
+  {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+  send_msg(State, From, To, M),
+%%  TODO: record the send event with ID, and possibly skipped messages
+  {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({send_altered, {Id, From, To, New_payload}}, State = #state{}) ->
-%%  TODO: search in corresponding queue for ID
-  [{_,F,T,_} | _] = [{ID,F,T,M} || {ID,F,T,M} <- State#state.messages_in_transit, ID == Id],
-  send_msg(State, F, T, New_payload),
-%%  TODO: record the send event with changes and ID
-  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
-  {noreply, State#state{messages_in_transit = UpdatedMessages}};
+  {_, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+  send_msg(State, From, To, New_payload),
+%%  TODO: record the altered send event with ID, and possibly skipped messages
+  {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({drop, {Id, From, To}}, State = #state{}) ->
-%%  omitted parameters from and to since id uniquely determines msg exchange
-  UpdatedMessages = lists:filter(fun({IDt,_,_,_}) -> Id /= IDt end, State#state.messages_in_transit),
-  {noreply, State#state{messages_in_transit = UpdatedMessages}};
+%%  TODO: search in corresponding queue for ID
+  {_, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+%%  TODO: check whether Skipped is empty and report if not
+  {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
 %%  TODO: submit the request to be executed by one of the clients; Coordinator is the node to contact
@@ -113,14 +127,16 @@ handle_cast({fwd_client_req, ClientName, Coordinator, ClientCmd}, State = #state
 %%
 handle_cast({crash_trans, {Node}}, State = #state{}) ->
   UpdatedCrashTrans = sets:add_element(Node, State#state.transient_crashed_nodes),
-  UpdatedMessages = lists:filter(fun({_,_,To,_}) -> To /= Node end, State#state.messages_in_transit),
-  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = UpdatedMessages}};
+  ListQueuesToEmpty = [{Other, node_pid(State, Node)} || Other <- get_all_node_pids(State), Other /= node_pid(State, Node)],
+  NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
+              State#state.messages_in_transit,
+              ListQueuesToEmpty),
+  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = NewMessageStore}};
 %%
 handle_cast({rejoin, {Node}}, State = #state{}) ->
+%%  this one is used for transient crashed nodes
   UpdatedCrashTrans = sets:del_element(Node, State#state.transient_crashed_nodes),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}}.
-%%handle_cast({join, Node, new_payload}, State = #state{}) ->
-%%  {noreply, State};
 %%handle_cast({crash_permanent, which_one, new_payload}, State = #state{}) ->
 %%  {noreply, State};
 
@@ -140,6 +156,7 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
+%% TODO: properly distinguish between name of a node and PID
 node_pid(_State, Node) ->
 %%  {ok, Pid} = orddict:find(Node, State#state.registered_nodes),
 %%  Pid.
@@ -168,3 +185,25 @@ check_if_whitelisted(_From, _To, _Payload) ->
 
 check_if_crashed(State, To) ->
   sets:is_element(To, State#state.transient_crashed_nodes).
+
+get_all_node_pids(State) ->
+  [V || {_, V} <- orddict:to_list(State#state.registered_nodes)].
+
+find_id_in_queue(QueueToSearch, Id) ->
+  find_id_in_queue([], QueueToSearch, Id).
+
+find_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
+  {{value, {CurrentId, CurrentPayload}}, NewTailQueueToSearch} = queue:out(TailQueueToSearch),
+  if
+    CurrentId == Id -> ReversedSkipped = lists:reverse(SkippedList),
+                      {CurrentPayload, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
+    true -> find_id_in_queue([{CurrentId, CurrentPayload} | SkippedList], NewTailQueueToSearch, Id)
+  end.
+
+find_message_and_get_upated_messages_in_transit(State, Id, From, To) ->
+  QueueToSearch = orddict:fetch({From, To}, State#state.messages_in_transit),
+  {M, Skipped, UpdatedQueue} = find_id_in_queue(QueueToSearch, Id),
+  NewMessageStore = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),
+  {M, Skipped, NewMessageStore}.
+
+%%{M, Skipped, UpdatedQueue} = find_id_in_queue(QueueToSearch, Id),

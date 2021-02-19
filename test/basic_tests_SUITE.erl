@@ -4,11 +4,25 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(basic_tests).
--include_lib("eunit/include/eunit.hrl").
+-module(basic_tests_SUITE).
+-include_lib("common_test/include/ct.hrl").
 
+-export([all/0,
+         init_per_testcase/2,
+         mil_naive_scheduler_test/1,
+         mil_naive_same_payload_scheduler_test/1,
+         mil_client_req_test/1,
+         mil_drop_tests/1,
+         mil_trans_crash_test/1]
+).
 
-mil_naive_scheduler_tests() ->
+all() -> [mil_naive_scheduler_test, mil_naive_same_payload_scheduler_test,
+          mil_client_req_test, mil_drop_tests, mil_trans_crash_test].
+
+init_per_testcase(_, Config) ->
+  Config.
+
+mil_naive_scheduler_test(_Config) ->
   {ok, Scheduler} = scheduler_naive:start(),
   {ok, MIL} = message_interception_layer:start(Scheduler, []),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -27,11 +41,12 @@ mil_naive_scheduler_tests() ->
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
-  ?assertEqual(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
-  ?assertEqual(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]).
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
+  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]),
+  ok.
 
 
-mil_naive_same_payload_scheduler_tests() ->
+mil_naive_same_payload_scheduler_test(_Config) ->
   {ok, Scheduler} = scheduler_naive_same_payload:start(1),
   {ok, MIL} = message_interception_layer:start(Scheduler, []),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -50,11 +65,11 @@ mil_naive_same_payload_scheduler_tests() ->
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
-  ?assertEqual(ReceivedMessages1, [1,1,1,1,1,1,1,1,1,1,1]),
-  ?assertEqual(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
+  assert_equal(ReceivedMessages1, [1,1,1,1,1,1,1,1,1,1,1]),
+  assert_equal(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
 
 
-mil_client_req_tests() ->
+mil_client_req_test(_Config) ->
   {ok, Scheduler} = scheduler_naive_same_payload:start(1),
   {ok, MIL} = message_interception_layer:start(Scheduler, [client1]),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -63,9 +78,9 @@ mil_client_req_tests() ->
   gen_server:cast(MIL, {client_req, client1, DummyReceiver1, "client_req"}),
   timer:sleep(100),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  ?assertEqual(ReceivedMessages1, ["client_req"]).
+  assert_equal(ReceivedMessages1, ["client_req"]).
 
-mil_drop_tests() ->
+mil_drop_tests(_Config) ->
   {ok, Scheduler} = scheduler_naive_dropping:start(),
   {ok, MIL} = message_interception_layer:start(Scheduler, []),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -78,9 +93,9 @@ mil_drop_tests() ->
   gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  ?assertEqual(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
 
-mil_trans_crash_test() ->
+mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
   {ok, Scheduler} = scheduler_naive_transient_fault:start(),
   {ok, MIL} = message_interception_layer:start(Scheduler, []),
@@ -94,4 +109,10 @@ mil_trans_crash_test() ->
   gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  ?assertEqual(ReceivedMessages1, [10,9,8]).
+  assert_equal(ReceivedMessages1, [10,9,8]).
+
+assert_equal(First, Second) ->
+  if
+    First == Second -> ok;
+    true -> ct:fail("not the same")
+  end.

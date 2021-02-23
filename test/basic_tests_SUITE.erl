@@ -8,16 +8,38 @@
 -include_lib("common_test/include/ct.hrl").
 
 -export([all/0,
-         init_per_testcase/2,
-         mil_naive_scheduler_test/1,
-         mil_naive_same_payload_scheduler_test/1,
-         mil_client_req_test/1,
-         mil_drop_tests/1,
-         mil_trans_crash_test/1]
-).
+  init_per_testcase/2,
+  mil_naive_scheduler_test/1,
+  mil_naive_same_payload_scheduler_test/1,
+  mil_client_req_test/1,
+  mil_drop_tests/1,
+  mil_trans_crash_test/1,
+  init_per_suite/1,
+  end_per_suite/1]).
 
 all() -> [mil_naive_scheduler_test, mil_naive_same_payload_scheduler_test,
           mil_client_req_test, mil_drop_tests, mil_trans_crash_test].
+
+init_per_suite(Config) ->
+  LogConfig = #{config => #{file => "./../../../../logs/schedules/sample.log"},
+                formatter => {logger_formatter, #{
+                  template =>  [what, "\t",
+                                {id, ["ID: ", id, "\t"], []},
+                                {node, ["Node: ", node, "\t"], []},
+                                {from, ["From: ", from, "\t"], []},
+                                {to, [" To: ", to, "\t"], []},
+                                {mesg, [" Msg: ", mesg, "\t"], []},
+                                {old_mesg, [" Old Msg: ", old_mesg, "\t"], []},
+                                {skipped, [" Skipped: ", skipped, "\t"], []},
+                                  "\n"]
+                }},
+              level => debug},
+  logger:set_primary_config(level, info),
+  logger:add_handler(to_file_handler, logger_std_h, LogConfig),
+  Config.
+
+end_per_suite(Config) ->
+  Config.
 
 init_per_testcase(_, Config) ->
   Config.

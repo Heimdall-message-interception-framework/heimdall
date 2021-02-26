@@ -127,7 +127,7 @@ handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) 
 %%
 handle_cast({fwd_client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
 %%  TODO: the client command should actually be the corresponding message
-%%  TODO: what about ack's?
+%%  TODO: what about ack's / replies?
   send_client_req(State, ClientName, Coordinator, ClientCmd),
 %%  logged when issued
 %%  logger:info("fwd_clreq", #{what => "clnt_req", from => ClientName, to => Coordinator, mesg => ClientCmd}),
@@ -182,7 +182,6 @@ client_pid(State, Node) ->
 send_msg(State, From, To, Msg) ->
   gen_server:cast(To, {message, node_pid(State, From), node_pid(State, To), Msg}).
 
-%% TODO: merge with the one before once pids and name issues are resolved
 send_client_req(State, From, To, Msg) ->
   gen_server:cast(To, {message, client_pid(State, From), node_pid(State, To), Msg}).
 

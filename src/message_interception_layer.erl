@@ -17,7 +17,8 @@
 
 -record(state, {
 %%  possibly fsm_state to check protocol
-  registered_nodes = orddict:new() :: orddict:orddict(Name::atom(), pid()),
+  registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
+  registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
   client_nodes :: orddict:orddict(Name::atom(), pid()),
   transient_crashed_nodes = sets:new() :: sets:set(atom()),
 %%  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
@@ -39,13 +40,13 @@ start(Scheduler, ClientNames) ->
   {ok, MIL}.
 
 init([Scheduler, ClientNames]) ->
-%%  TODO: change to orddict
-  ClientNodes = lists:map(fun(Name) ->
+  ClientNodes = orddict:from_list(
+                            lists:map(fun(Name) ->
                             {ok, Pid} = client_node:start(Name, self()),
                             {Name, Pid}
                           end,
-                          ClientNames),
-%%  TODO: register nodes?
+                          ClientNames)
+                ),
   {ok, Pid_sender} = message_sender:start(),
   {
     ok, #state{
@@ -63,22 +64,26 @@ handle_cast({start}, State = #state{}) ->
   {noreply, State};
 %%
 handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->
-  NewRegisteredNodes = orddict:store(NodeName, NodePid, State#state.registered_nodes),
-  AllOtherPids = get_all_node_pids(State),
-  ListNewQueues = [{{Other, NodePid}, queue:new()} || Other <- AllOtherPids] ++
-                  [{{NodePid, Other}, queue:new()} || Other <- AllOtherPids],
+  NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
+  NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
+  AllOtherNames = get_all_node_names(State),
+  ListNewQueues = [{{Other, NodeName}, queue:new()} || Other <- AllOtherNames] ++
+                  [{{NodeName, Other}, queue:new()} || Other <- AllOtherNames],
   OrddictNewQueues = orddict:from_list(ListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, OrddictNewQueues),
 %%  TODO: record registration of node
-  {noreply, State#state{registered_nodes = NewRegisteredNodes, messages_in_transit = NewMessageStore}};
+  {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
+                        messages_in_transit = NewMessageStore}};
 %%
-handle_cast({bang, {From, To, Payload}}, State = #state{}) ->
+handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
+  From = pid_node(State, FromPid),
+  To = pid_node(State, ToPid),
   Bool_crashed = check_if_crashed(State, To),
   Bool_whitelisted = check_if_whitelisted(From, To, Payload),
   if
     Bool_crashed -> {noreply, State};  % if crashed, do also not let whitelisted trough
-    Bool_whitelisted -> send_msg(State, From, To, Payload),
+    Bool_whitelisted -> send_msg(State, FromPid, ToPid, Payload),
                         {noreply, State};
     true ->
       QueueToUpdate = orddict:fetch({From, To}, State#state.messages_in_transit),
@@ -130,7 +135,7 @@ handle_cast({fwd_client_req, ClientName, Coordinator, ClientCmd}, State = #state
 %%
 handle_cast({crash_trans, {Node}}, State = #state{}) ->
   UpdatedCrashTrans = sets:add_element(Node, State#state.transient_crashed_nodes),
-  ListQueuesToEmpty = [{Other, node_pid(State, Node)} || Other <- get_all_node_pids(State), Other /= node_pid(State, Node)],
+  ListQueuesToEmpty = [{Other, Node} || Other <- get_all_node_names(State), Other /= Node],
   NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
               State#state.messages_in_transit,
               ListQueuesToEmpty),
@@ -162,10 +167,12 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-%% TODO: properly distinguish between name of a node and PID
-node_pid(_State, Node) ->
-%%  {ok, Pid} = orddict:find(Node, State#state.registered_nodes),
-%%  Pid.
+node_pid(State, Node) ->
+  {ok, Pid} = orddict:find(Node, State#state.registered_nodes_pid),
+  Pid.
+
+pid_node(State, Pid) ->
+  {ok, Node} = orddict:find(Pid, State#state.registered_pid_nodes),
   Node.
 
 client_pid(State, Node) ->
@@ -173,12 +180,10 @@ client_pid(State, Node) ->
   Pid.
 
 send_msg(State, From, To, Msg) ->
-%%  gen_server:cast(State#state.message_sender_id, {send, node_pid(State, From), node_pid(State, To), Msg}).
   gen_server:cast(To, {message, node_pid(State, From), node_pid(State, To), Msg}).
 
 %% TODO: merge with the one before once pids and name issues are resolved
 send_client_req(State, From, To, Msg) ->
-%%  gen_server:cast(State#state.message_sender_id, {send, node_pid(State, From), node_pid(State, To), Msg}).
   gen_server:cast(To, {message, client_pid(State, From), node_pid(State, To), Msg}).
 
 restart_timer() ->
@@ -192,8 +197,8 @@ check_if_whitelisted(_From, _To, _Payload) ->
 check_if_crashed(State, To) ->
   sets:is_element(To, State#state.transient_crashed_nodes).
 
-get_all_node_pids(State) ->
-  [V || {_, V} <- orddict:to_list(State#state.registered_nodes)].
+get_all_node_names(State) ->
+  orddict:fetch_keys(State#state.registered_nodes_pid).
 
 find_id_in_queue(QueueToSearch, Id) ->
   find_id_in_queue([], QueueToSearch, Id).
@@ -204,7 +209,7 @@ find_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
     CurrentId == Id -> ReversedSkipped = lists:reverse(SkippedList),
                       {CurrentPayload, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
 %%    skipped does only contain the IDs
-    true -> find_id_in_queue([{CurrentId} | SkippedList], NewTailQueueToSearch, Id)
+    true -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
   end.
 
 find_message_and_get_upated_messages_in_transit(State, Id, From, To) ->

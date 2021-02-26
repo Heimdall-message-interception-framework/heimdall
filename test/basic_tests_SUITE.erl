@@ -17,8 +17,11 @@
   init_per_suite/1,
   end_per_suite/1]).
 
-all() -> [mil_naive_scheduler_test, mil_naive_same_payload_scheduler_test,
-          mil_client_req_test, mil_drop_tests, mil_trans_crash_test].
+all() -> [mil_naive_scheduler_test,
+          mil_naive_same_payload_scheduler_test,
+          mil_client_req_test,
+          mil_drop_tests,
+          mil_trans_crash_test].
 
 init_per_suite(Config) ->
   LogConfig = #{config => #{file => "./../../../../logs/schedules/sample.log"},
@@ -95,8 +98,9 @@ mil_client_req_test(_Config) ->
   {ok, MIL} = message_interception_layer:start(Scheduler, [client1]),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
   {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
+  gen_server:cast(MIL, {register, {dr1, DummyReceiver1}}),
   gen_server:cast(MIL, {start}),
-  gen_server:cast(MIL, {client_req, client1, DummyReceiver1, "client_req"}),
+  gen_server:cast(MIL, {client_req, client1, dr1, "client_req"}),
   timer:sleep(100),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   assert_equal(ReceivedMessages1, ["client_req"]).
@@ -133,7 +137,7 @@ mil_trans_crash_test(_Config) ->
   assert_equal(ReceivedMessages1, [10,9,8]).
 
 assert_equal(First, Second) ->
-  if
-    First == Second -> ok;
-    true -> ct:fail("not the same")
+  case First == Second of
+    true -> ok;
+    false -> ct:fail("not the same")
   end.

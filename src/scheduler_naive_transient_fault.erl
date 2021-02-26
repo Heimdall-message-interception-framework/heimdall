@@ -58,6 +58,7 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 next_event_and_state(State) ->
 %% this one simply returns the first element for 3 messages,
 %% afterwards it fails the process
+%%  TODO: change to case
   if
     length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
     true -> [{ID,F,T,M} | Tail] = State#state.messages_in_transit,

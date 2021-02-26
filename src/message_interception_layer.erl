@@ -6,6 +6,8 @@
 %%%-------------------------------------------------------------------
 -module(message_interception_layer).
 
+-include_lib("sched_event.hrl").
+
 -behaviour(gen_server).
 
 -export([start/2]).
@@ -22,7 +24,6 @@
   client_nodes :: orddict:orddict(Name::atom(), pid()),
   transient_crashed_nodes = sets:new() :: sets:set(atom()),
 %%  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
-%%  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
   messages_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
                                         queue:queue({ID::any(), Payload::any()})),
   new_messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
@@ -140,7 +141,7 @@ handle_cast({crash_trans, {Node}}, State = #state{}) ->
               State#state.messages_in_transit,
               ListQueuesToEmpty),
 %%  for now, we do not log all the dropped messages
-  logger:info("trns_crs", #{what => "trns_crs", node => Node}),
+  logger:info(#{what => "trns_crs", node => Node}),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = NewMessageStore}};
 %%
 handle_cast({rejoin, {Node}}, State = #state{}) ->

@@ -6,6 +6,7 @@
 %%%-------------------------------------------------------------------
 -module(basic_tests_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("../src/sched_event.hrl").
 
 -export([all/0,
   init_per_testcase/2,
@@ -24,7 +25,9 @@ all() -> [mil_naive_scheduler_test,
           mil_trans_crash_test].
 
 init_per_suite(Config) ->
-  LogConfig = #{config => #{file => "./../../../../logs/schedules/sample.log"},
+  logger:set_primary_config(level, info),
+%%  TODO: add filter if "what" is undefined
+  LogConfigReadable = #{config => #{file => "./../../../../logs/schedules/sample_readable.log"},
                 formatter => {logger_formatter, #{
                   template =>  [what, "\t",
                                 {id, ["ID: ", id, "\t"], []},
@@ -37,8 +40,22 @@ init_per_suite(Config) ->
                                   "\n"]
                 }},
               level => debug},
-  logger:set_primary_config(level, info),
-  logger:add_handler(to_file_handler, logger_std_h, LogConfig),
+  logger:add_handler(readable_handler, logger_std_h, LogConfigReadable),
+  LogConfigMachine = #{config => #{file => "./../../../../logs/schedules/sample_machine.log"},
+              formatter => {logger_formatter, #{
+                template =>  ["{sched_event, ",
+                  {what, ["\"", what, "\""], ["undefined"]}, ", ",
+                  {id, [id], ["undefined"]}, ", ",
+                  {node, ["\"", node, "\""], ["undefined"]}, ", ",
+                  {from, ["\"", from, "\""], ["undefined"]}, ", ",
+                  {to, ["\"", to, "\""], ["undefined"]}, ", ",
+                  {mesg, ["\"", mesg, "\""], ["undefined"]}, ", ",
+                  {old_mesg, ["\"", old_mesg, "\""], ["undefined"]}, ", ",
+                  {skipped, [skipped], ["undefined"]},
+                              "}.\n"]
+              }},
+    level => debug},
+  logger:add_handler(machine_handler, logger_std_h, LogConfigMachine),
   Config.
 
 end_per_suite(Config) ->
@@ -141,3 +158,4 @@ assert_equal(First, Second) ->
     true -> ok;
     false -> ct:fail("not the same")
   end.
+

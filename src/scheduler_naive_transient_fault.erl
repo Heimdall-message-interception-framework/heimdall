@@ -57,16 +57,15 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element for 3 messages,
-%% afterwards it fails the process
-%%  TODO: change to case
-  if
-    length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
-    true -> [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
-      if
-        M == 7 ->
+%% afterwards it crashes the process (transiently)
+  case length(State#state.messages_in_transit) == 0 of
+    true -> {State, {noop, {}}} ;
+    false -> [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
+      case M == 7 of
+        true ->
           FilteredMessages = lists:filter(fun({_,_,To,_}) -> To /= T end, Tail),
           {State#state{messages_in_transit = FilteredMessages}, {crash_trans, {T}}};
-        true ->
+        false ->
           {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
       end
   end.

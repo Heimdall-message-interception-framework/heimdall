@@ -57,13 +57,13 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element
-  if
-    length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
-    true ->
+  case length(State#state.messages_in_transit) == 0 of
+    true ->  {State, {noop, {}}} ;
+    false ->
       [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
-      if
-        M == 5 -> {State#state{messages_in_transit = Tail}, {drop, {ID,F,T}}};
-        true -> {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
+      case M == 5 of
+        true -> {State#state{messages_in_transit = Tail}, {drop, {ID,F,T}}};
+        false -> {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
       end
   end.
 

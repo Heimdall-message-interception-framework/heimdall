@@ -204,11 +204,11 @@ find_id_in_queue(QueueToSearch, Id) ->
 
 find_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
   {{value, {CurrentId, CurrentPayload}}, NewTailQueueToSearch} = queue:out(TailQueueToSearch),
-  if
-    CurrentId == Id -> ReversedSkipped = lists:reverse(SkippedList),
-                      {CurrentPayload, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
+  case CurrentId == Id  of
+    true -> ReversedSkipped = lists:reverse(SkippedList),
+            {CurrentPayload, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
 %%    skipped does only contain the IDs
-    true -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
+    false -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
   end.
 
 find_message_and_get_upated_messages_in_transit(State, Id, From, To) ->

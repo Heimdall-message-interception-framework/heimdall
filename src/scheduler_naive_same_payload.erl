@@ -58,9 +58,9 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element
-  if
-    length(State#state.messages_in_transit) == 0 -> {State, {noop, {}}} ;
-    true ->
+  case length(State#state.messages_in_transit) == 0 of
+    true -> {State, {noop, {}}} ;
+    false ->
       [{ID,F,T,_} | Tail] = State#state.messages_in_transit,
       {State#state{messages_in_transit = Tail}, {send_altered, {ID, F, T, State#state.standard_payload}}}
   end.

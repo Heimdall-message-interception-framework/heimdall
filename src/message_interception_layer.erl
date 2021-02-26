@@ -6,6 +6,8 @@
 %%%-------------------------------------------------------------------
 -module(message_interception_layer).
 
+-include_lib("sched_event.hrl").
+
 -behaviour(gen_server).
 
 -export([start/2]).
@@ -16,17 +18,14 @@
 -define(INTERVAL, 100).
 
 -record(state, {
-%%  possibly fsm_state to check protocol
   registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
   client_nodes :: orddict:orddict(Name::atom(), pid()),
   transient_crashed_nodes = sets:new() :: sets:set(atom()),
-%%  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
-%%  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
+  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
   messages_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
                                         queue:queue({ID::any(), Payload::any()})),
   new_messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
-  message_sender_id :: pid(),
   scheduler_id :: pid(),
   id_counter = 0 :: any()
 }).
@@ -47,10 +46,8 @@ init([Scheduler, ClientNames]) ->
                           end,
                           ClientNames)
                 ),
-  {ok, Pid_sender} = message_sender:start(),
   {
     ok, #state{
-               message_sender_id = Pid_sender,
                scheduler_id = Scheduler,
                client_nodes = ClientNodes
     }
@@ -72,14 +69,14 @@ handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->
   OrddictNewQueues = orddict:from_list(ListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, OrddictNewQueues),
-%%  TODO: record registration of node
+  logger:info("registration", #{what => "register", node => NodeName}),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
                         messages_in_transit = NewMessageStore}};
 %%
 handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
   From = pid_node(State, FromPid),
   To = pid_node(State, ToPid),
-  Bool_crashed = check_if_crashed(State, To),
+  Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
   Bool_whitelisted = check_if_whitelisted(From, To, Payload),
   if
     Bool_crashed -> {noreply, State};  % if crashed, do also not let whitelisted trough
@@ -100,7 +97,6 @@ handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
 handle_cast({noop, {}}, State = #state{}) ->
   {noreply, State};
 %%
-%% for queues, having From and To would help
 handle_cast({send, {Id, From, To}}, State = #state{}) ->
   {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, M),
@@ -130,7 +126,6 @@ handle_cast({fwd_client_req, ClientName, Coordinator, ClientCmd}, State = #state
 %%  TODO: what about ack's / replies?
   send_client_req(State, ClientName, Coordinator, ClientCmd),
 %%  logged when issued
-%%  logger:info("fwd_clreq", #{what => "clnt_req", from => ClientName, to => Coordinator, mesg => ClientCmd}),
   {noreply, State};
 %%
 handle_cast({crash_trans, {Node}}, State = #state{}) ->
@@ -139,17 +134,25 @@ handle_cast({crash_trans, {Node}}, State = #state{}) ->
   NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
               State#state.messages_in_transit,
               ListQueuesToEmpty),
-%%  for now, we do not log all the dropped messages
-  logger:info("trns_crs", #{what => "trns_crs", node => Node}),
+%%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
+  logger:info(#{what => "trns_crs", node => Node}),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = NewMessageStore}};
 %%
 handle_cast({rejoin, {Node}}, State = #state{}) ->
-%%  this one is used for transient crashed nodes
+%%  for transient crashes only
   UpdatedCrashTrans = sets:del_element(Node, State#state.transient_crashed_nodes),
   logger:info("rejoin", #{what => "rejoin", node => Node}),
-  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}}.
-%%handle_cast({crash_permanent, which_one, new_payload}, State = #state{}) ->
-%%  {noreply, State};
+  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}};
+handle_cast({crash_perm, {Node}}, State = #state{}) ->
+%%  for now, we keep the outgoing channels since these are messages that were sent before (still scheduable)
+  UpdatedCrashPerm = sets:add_element(Node, State#state.permanent_crashed_nodes),
+  ListQueuesToDelete = [{Other, Node} || Other <- get_all_node_names(State), Other /= Node],
+  NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:erase({From, To}, SoFar) end,
+    State#state.messages_in_transit,
+    ListQueuesToDelete),
+%%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
+  logger:info(#{what => "perm_crs", node => Node}),
+  {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm, messages_in_transit = NewMessageStore}}.
 
 
 handle_info(trigger_get_events, State = #state{}) ->
@@ -186,7 +189,7 @@ send_client_req(State, From, To, Msg) ->
   gen_server:cast(To, {message, client_pid(State, From), node_pid(State, To), Msg}).
 
 restart_timer() ->
-%%  could also only restart when not enabled yet and then after sched events
+%%  TODO: give option for this or scheduler asks for new events themself for
   erlang:send_after(?INTERVAL, self(), trigger_get_events).
 
 check_if_whitelisted(_From, _To, _Payload) ->
@@ -194,7 +197,7 @@ check_if_whitelisted(_From, _To, _Payload) ->
   false.
 
 check_if_crashed(State, To) ->
-  sets:is_element(To, State#state.transient_crashed_nodes).
+  sets:is_element(To, State#state.transient_crashed_nodes) or sets:is_element(To, State#state.permanent_crashed_nodes).
 
 get_all_node_names(State) ->
   orddict:fetch_keys(State#state.registered_nodes_pid).

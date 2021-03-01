@@ -60,7 +60,7 @@ handle_cast({start}, State = #state{}) ->
   erlang:send_after(?INTERVAL, self(), trigger_get_events),
   {noreply, State};
 %%
-handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->
+handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
   NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names(State),
@@ -69,7 +69,7 @@ handle_cast({register, {NodeName, NodePid}}, State = #state{}) ->
   OrddictNewQueues = orddict:from_list(ListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, OrddictNewQueues),
-  logger:info("registration", #{what => "register", node => NodeName}),
+  logger:info("registration", #{what => "register", node => NodeName, class => NodeClass}),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
                         messages_in_transit = NewMessageStore}};
 %%

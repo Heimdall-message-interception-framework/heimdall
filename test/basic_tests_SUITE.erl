@@ -17,11 +17,13 @@
   init_per_suite/1, end_per_suite/1,
   init_per_testcase/2, end_per_testcase/2]).
 
-all() -> [mil_naive_scheduler_test,
-          mil_naive_same_payload_scheduler_test,
-          mil_client_req_test,
-          mil_drop_tests,
-          mil_trans_crash_test].
+all() -> [
+          mil_naive_scheduler_test
+%%          mil_naive_same_payload_scheduler_test,
+%%          mil_client_req_test,
+%%          mil_drop_tests,
+%%          mil_trans_crash_test
+         ].
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
@@ -35,28 +37,28 @@ init_per_testcase(TestCase, Config) ->
   logger:add_handler(machine_handler, logger_std_h, logging_configs:get_config_for_machine(TestCase)),
   Config.
 
-end_per_testcase(TestCase, Config) ->
-%%  copy the log file and erase it
+end_per_testcase(_, Config) ->
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),
   Config.
 
 mil_naive_scheduler_test(_Config) ->
   {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler, []),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
-  {ok, DummyReceiver2} = dummy_receiver:start_link(dr2),
-  gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
-  gen_server:cast(MIL, {register, {dr2, DummyReceiver2, dummy_receiver}}),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   {ok, DummySender2} = dummy_sender:start(ds2, MIL),
   gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
   gen_server:cast(MIL, {register, {ds2, DummySender2, dummy_sender}}),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
+  {ok, DummyReceiver2} = dummy_receiver:start(dr2, MIL),
+  gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
+  gen_server:cast(MIL, {register, {dr2, DummyReceiver2, dummy_receiver}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
-  gen_server:cast(DummySender2, {send_N_messages_with_interval, {10, DummyReceiver2, 75}}),
+  timer:sleep(100), % wait first a bit so that logging is in sync
+  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
+  send_N_messages_with_interval(10, DummySender2, ds2, DummyReceiver2, dr2, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
@@ -66,10 +68,10 @@ mil_naive_scheduler_test(_Config) ->
 
 mil_naive_same_payload_scheduler_test(_Config) ->
   {ok, Scheduler} = scheduler_naive_same_payload:start(1),
-  {ok, MIL} = message_interception_layer:start(Scheduler, []),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
-  {ok, DummyReceiver2} = dummy_receiver:start_link(dr2),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
+  {ok, DummyReceiver2} = dummy_receiver:start(dr2, MIL),
   gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
   gen_server:cast(MIL, {register, {dr2, DummyReceiver2, dummy_receiver}}),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
@@ -78,8 +80,8 @@ mil_naive_same_payload_scheduler_test(_Config) ->
   gen_server:cast(MIL, {register, {ds2, DummySender2, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
-  gen_server:cast(DummySender2, {send_N_messages_with_interval, {10, DummyReceiver2, 75}}),
+  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
+  send_N_messages_with_interval(10, DummySender2, ds2, DummyReceiver2, dr2, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
@@ -89,27 +91,28 @@ mil_naive_same_payload_scheduler_test(_Config) ->
 
 mil_client_req_test(_Config) ->
   {ok, Scheduler} = scheduler_naive_same_payload:start(1),
-  {ok, MIL} = message_interception_layer:start(Scheduler, [client1]),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
+  gen_server:cast(MIL, {register_client, {client1}}),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
   gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
   gen_server:cast(MIL, {start}),
-  gen_server:cast(MIL, {client_req, client1, dr1, "client_req"}),
+  gen_server:cast(MIL, {client_req, {client1, dr1, "client_req"}}),
   timer:sleep(100),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   helper_functions:assert_equal(ReceivedMessages1, ["client_req"]).
 
 mil_drop_tests(_Config) ->
   {ok, Scheduler} = scheduler_naive_dropping:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler, []),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
   gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
+  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   helper_functions:assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
@@ -117,16 +120,21 @@ mil_drop_tests(_Config) ->
 mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
   {ok, Scheduler} = scheduler_naive_transient_fault:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler, []),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  {ok, DummyReceiver1} = dummy_receiver:start_link(dr1),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
   gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  gen_server:cast(DummySender1, {send_N_messages_with_interval, {10, DummyReceiver1, 75}}),
+  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   helper_functions:assert_equal(ReceivedMessages1, [10,9,8]).
 
+
+%% internal for replaying
+send_N_messages_with_interval(N, From, FromName, To, ToName, Interval) ->
+  gen_server:cast(From, {send_N_messages_with_interval, {N, To, Interval}}),
+  logger:info("send_N_msgs_int", #{what => send_N_msgs_int, to => FromName, mesg => {send_N_messages_with_interval, {N, ToName, Interval}}}).

@@ -32,7 +32,7 @@ handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
 handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-  gen_server:cast(State#state.message_interception_layer_id, {fwd_client_req, ClientName, Coordinator, ClientCmd}),
+  gen_server:cast(State#state.message_interception_layer_id, {fwd_client_req, {ClientName, Coordinator, ClientCmd}}),
   {noreply, State}.
 
 handle_info(_Info, State = #state{}) ->

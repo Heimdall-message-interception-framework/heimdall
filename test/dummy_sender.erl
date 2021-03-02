@@ -32,6 +32,7 @@ handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
 handle_cast({send_N_messages_with_interval, {N, To, Interval}}, State = #state{}) ->
+  erlang:display("will send by sender"),
   send_N_messages_with_interval(State, N, To, Interval),
   {noreply, State}.
 

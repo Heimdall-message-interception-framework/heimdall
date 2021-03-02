@@ -10,7 +10,7 @@
 
 -behaviour(gen_server).
 
--export([start/2]).
+-export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -20,7 +20,7 @@
 -record(state, {
   registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
-  client_nodes :: orddict:orddict(Name::atom(), pid()),
+  client_nodes = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   transient_crashed_nodes = sets:new() :: sets:set(atom()),
   permanent_crashed_nodes = sets:new() :: sets:set(atom()),
   messages_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
@@ -34,22 +34,14 @@
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Scheduler, ClientNames) ->
-  {ok, MIL} = gen_server:start_link(?MODULE, [Scheduler, ClientNames], []),
+start(Scheduler) ->
+  {ok, MIL} = gen_server:start_link(?MODULE, [Scheduler], []),
   {ok, MIL}.
 
-init([Scheduler, ClientNames]) ->
-  ClientNodes = orddict:from_list(
-                            lists:map(fun(Name) ->
-                            {ok, Pid} = client_node:start(Name, self()),
-                            {Name, Pid}
-                          end,
-                          ClientNames)
-                ),
+init([Scheduler]) ->
   {
     ok, #state{
-               scheduler_id = Scheduler,
-               client_nodes = ClientNodes
+               scheduler_id = Scheduler
     }
   }.
 
@@ -69,11 +61,18 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   OrddictNewQueues = orddict:from_list(ListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, OrddictNewQueues),
-  logger:info("registration", #{what => "register", node => NodeName, class => NodeClass}),
+  logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
                         messages_in_transit = NewMessageStore}};
 %%
+handle_cast({register_client, {ClientName}}, State = #state{}) ->
+  {ok, Pid} = client_node:start(ClientName, self()),
+  NewClientDict = orddict:store(ClientName, Pid, State#state.client_nodes),
+  logger:info("regst_client", #{what => reg_clnt, name => ClientName}),
+  {noreply, State#state{client_nodes = NewClientDict}};
 handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
+  erlang:display(FromPid),
+  erlang:display(State#state.registered_pid_nodes),
   From = pid_node(State, FromPid),
   To = pid_node(State, ToPid),
   Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
@@ -87,7 +86,7 @@ handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
       UpdatedQueue = queue:in({State#state.id_counter, Payload}, QueueToUpdate),
       UpdatedMessagesInTransit = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),
       UpdatedNewMessagesInTransit = State#state.new_messages_in_transit ++ [{State#state.id_counter, From, To, Payload}],
-      logger:info("received", #{what => "received", id => State#state.id_counter, from => From, to => To, mesg => Payload}),
+      logger:info("received", #{what => received, id => State#state.id_counter, from => From, to => To, mesg => Payload}),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{messages_in_transit = UpdatedMessagesInTransit,
         new_messages_in_transit = UpdatedNewMessagesInTransit,
@@ -100,63 +99,64 @@ handle_cast({noop, {}}, State = #state{}) ->
 handle_cast({send, {Id, From, To}}, State = #state{}) ->
   {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, M),
-  logger:info("snd_orig", #{what => "snd_orig", id => Id, from => From, to => To, mesg => M, skipped => Skipped}),
+  logger:info("snd_orig", #{what => snd_orig, id => Id, from => From, to => To, mesg => M, skipped => Skipped}),
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({send_altered, {Id, From, To, New_payload}}, State = #state{}) ->
   {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, New_payload),
-  logger:info("snd_altr", #{what => "snd_altr", id => Id, from => From, to => To, mesg => New_payload, old_mesg => M, skipped => Skipped}),
+  logger:info("snd_altr", #{what => snd_altr, id => Id, from => From, to => To, mesg => New_payload, old_mesg => M, skipped => Skipped}),
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({drop, {Id, From, To}}, State = #state{}) ->
   {M, _, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
-  logger:info("drop_msg", #{what => "drop_msg", id => Id, from => From, to => To, mesg => M}),
+  logger:info("drop_msg", #{what => drop_msg, id => Id, from => From, to => To, mesg => M}),
 %%  maybe check whether Skipped is empty and report if not
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
-handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
+handle_cast({client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
 %%  TODO: once connected with riak, submit the request to be executed by one of the clients; Coordinator is the node to contact
   gen_server:cast(client_pid(State, ClientName), {client_req, ClientName, Coordinator, ClientCmd}),
-  logger:info("clnt_req", #{what => "clnt_req", from => ClientName, to => Coordinator, mesg => ClientCmd}),
+  logger:info("clnt_req", #{what => clnt_req, from => ClientName, to => Coordinator, mesg => ClientCmd}),
   {noreply, State};
 %%
-handle_cast({fwd_client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
+handle_cast({fwd_client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
 %%  TODO: the client command should actually be the corresponding message
 %%  TODO: what about ack's / replies?
   send_client_req(State, ClientName, Coordinator, ClientCmd),
 %%  logged when issued
   {noreply, State};
 %%
-handle_cast({crash_trans, {Node}}, State = #state{}) ->
-  UpdatedCrashTrans = sets:add_element(Node, State#state.transient_crashed_nodes),
-  ListQueuesToEmpty = [{Other, Node} || Other <- get_all_node_names(State), Other /= Node],
+handle_cast({crash_trans, {NodeName}}, State = #state{}) ->
+  UpdatedCrashTrans = sets:add_element(NodeName, State#state.transient_crashed_nodes),
+  ListQueuesToEmpty = [{Other, NodeName} || Other <- get_all_node_names(State), Other /= NodeName],
   NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
               State#state.messages_in_transit,
               ListQueuesToEmpty),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
-  logger:info(#{what => "trns_crs", node => Node}),
+  logger:info(#{what => trns_crs, name => NodeName}),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = NewMessageStore}};
 %%
-handle_cast({rejoin, {Node}}, State = #state{}) ->
+handle_cast({rejoin, {NodeName}}, State = #state{}) ->
 %%  for transient crashes only
-  UpdatedCrashTrans = sets:del_element(Node, State#state.transient_crashed_nodes),
-  logger:info("rejoin", #{what => "rejoin", node => Node}),
+  UpdatedCrashTrans = sets:del_element(NodeName, State#state.transient_crashed_nodes),
+  logger:info("rejoin", #{what => rejoin, name => NodeName}),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}};
-handle_cast({crash_perm, {Node}}, State = #state{}) ->
+handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
 %%  for now, we keep the outgoing channels since these are messages that were sent before (still scheduable)
-  UpdatedCrashPerm = sets:add_element(Node, State#state.permanent_crashed_nodes),
-  ListQueuesToDelete = [{Other, Node} || Other <- get_all_node_names(State), Other /= Node],
+  UpdatedCrashPerm = sets:add_element(NodeName, State#state.permanent_crashed_nodes),
+  ListQueuesToDelete = [{Other, NodeName} || Other <- get_all_node_names(State), Other /= NodeName],
   NewMessageStore = lists:foldl(fun({From, To}, SoFar) -> orddict:erase({From, To}, SoFar) end,
     State#state.messages_in_transit,
     ListQueuesToDelete),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
-  logger:info(#{what => "perm_crs", node => Node}),
+  logger:info(#{what => perm_crs, name => NodeName}),
   {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm, messages_in_transit = NewMessageStore}}.
 
 
 handle_info(trigger_get_events, State = #state{}) ->
   gen_server:cast(State#state.scheduler_id, {new_events, State#state.new_messages_in_transit}),
+  erlang:display("triggered get events"),
   restart_timer(),
   {noreply, State#state{new_messages_in_transit = []}}.
 

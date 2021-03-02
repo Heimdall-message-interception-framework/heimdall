@@ -9,12 +9,13 @@
 -author("fms").
 
 -record(sched_event, {
-                  what :: string(), %% we could be more precise here
+                  what :: atom(), %% we could be more precise here
                   id = undefined :: number(),
-                  node = undefined :: string(),
+                  name = undefined :: string(),
+                  class = undefined :: string(),
                   from = undefined :: string(),
                   to = undefined :: string(),
-                  mesg = undefined :: string(),
-                  old_mesg = undefined :: string(),
-                  skipped = undefined :: list(string())
+                  mesg = undefined :: any(),
+                  old_mesg = undefined :: any(),
+                  skipped = undefined :: list(number())
 }).

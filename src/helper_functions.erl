@@ -10,7 +10,7 @@
 -author("fms").
 
 %% API
--export([get_readable_time/0, assert_equal/2, firstmatch/2]).
+-export([get_readable_time/0, assert_equal/2, firstmatch/2, assert_equal_schedules/2]).
 
 get_readable_time() ->
   {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:now_to_datetime(erlang:timestamp()),
@@ -21,6 +21,14 @@ assert_equal(First, Second) ->
     true -> ok;
     false -> ct:fail("not the same")
   end.
+
+assert_equal_schedules(File1, File2) ->
+  Schedule1 = file:consult(File1),
+  Schedule2 = file:consult(File2),
+  {_, EventsReplayed1} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule1),
+  {_, EventsReplayed2} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule2),
+  assert_equal(EventsReplayed1, EventsReplayed2).
+
 
 firstmatch(CondFun, SomeList) ->
   firstmatch(CondFun, [], SomeList).

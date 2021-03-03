@@ -66,6 +66,8 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
                 {orddict:store(ID, FoundEv#sched_event.id, EnabledEventsSoFar), RemainingEventsToMatch, none_skipped};
               no_such_element ->
 %%                here skipped is the first message without a corresponding match
+                erlang:display({ID, From, To, Msg}),
+                erlang:display({EventsToMatchSoFar}),
                 throw({skipped, {EnabledEventsSoFar, EventsToMatchSoFar, {skipped, {ID, From, To, Msg}}}})
             end
                       end,
@@ -115,20 +117,18 @@ handle_cast({try_next}, State = #state{}) ->
             {found, _, TempMessagesInTransit} = helper_functions:firstmatch(fun({Id, _, _, _}) -> Id == MatchedID end, State#state.messages_in_transit),
             {TempMessagesInTransit, true};
           false ->
-            {State#state.messages_in_transit, false}
+            case NextEvent#sched_event.what of
+              trns_crs ->
+                  TempMessagesInTransit = lists:filter(fun({_, _, To, _}) -> To /= NextEvent#sched_event.name end, State#state.messages_in_transit),
+                {TempMessagesInTransit, true};
+              _ ->  {State#state.messages_in_transit, false}
+              end
         end,
       OtherEnabled =
         case NextEvent#sched_event.what of
-          send_N_msgs_int ->
-            %%      this is a helper case for testing, change if necessary
-            {send_N_messages_with_interval, {N, To, Interval}} = NextEvent#sched_event.mesg,
-            cast_msg_and_notify(node_pid(State, NextEvent#sched_event.to), {send_N_messages_with_interval, {N, node_pid(State, To), Interval}}),
-            logger:info("send_N_msgs_int", #{what => send_N_msgs_int, to => NextEvent#sched_event.to, mesg => {send_N_messages_with_interval, {N, To, Interval}}}),
-            true;
           cast_msg ->
             {From, To, Mesg} = {NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg},
-            cast_msg_and_notify(From, {casted, To, {Mesg}}),
-            logger:info("cast_msg", #{what => cast_msg, from => From, to => To, mesg => Mesg}),
+            cast_msg_and_notify(MIL, {cast_msg, From, To, Mesg}),
             true;
           reg_node ->
             {ok, PidNew} = orddict:find(NextEvent#sched_event.name, NewRegisteredNodesPid),
@@ -138,7 +138,7 @@ handle_cast({try_next}, State = #state{}) ->
             cast_msg_and_notify(MIL, {register_client, {client1}}),
             true;
           clnt_req ->
-            cast_msg_and_notify(MIL, {client_req, NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg}),
+            cast_msg_and_notify(MIL, {client_req, {NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg}}),
             true;
           trns_crs ->
             cast_msg_and_notify(MIL, {crash_trans, {NextEvent#sched_event.name}}),
@@ -185,11 +185,6 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 %%% Internal functions
 %%%===================================================================
-
-node_pid(State, Node) ->
-  {ok, Pid} = orddict:find(Node, State#state.registered_nodes_pid),
-  Pid.
-
 
 cast_msg_and_notify(To, Message) ->
   gen_server:cast(To, Message),

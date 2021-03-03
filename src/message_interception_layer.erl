@@ -86,7 +86,11 @@ handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
   Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
   Bool_whitelisted = check_if_whitelisted(From, To, Payload),
   if
-    Bool_crashed -> {noreply, State};  % if crashed, do also not let whitelisted trough
+    Bool_crashed ->
+%%      still log this event for matching later on
+      logger:info("rcv_crsh", #{what => rcv_crsh, id => State#state.id_counter, from => From, to => To, mesg => Payload}),
+      NextID = State#state.id_counter + 1,
+      {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
     Bool_whitelisted -> send_msg(State, FromPid, ToPid, Payload),
                         {noreply, State};
     true ->
@@ -142,7 +146,7 @@ handle_cast({crash_trans, {NodeName}}, State = #state{}) ->
               State#state.messages_in_transit,
               ListQueuesToEmpty),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
-  logger:info(#{what => trns_crs, name => NodeName}),
+  logger:info("trans_crs", #{what => trns_crs, name => NodeName}),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, messages_in_transit = NewMessageStore}};
 %%
 handle_cast({rejoin, {NodeName}}, State = #state{}) ->

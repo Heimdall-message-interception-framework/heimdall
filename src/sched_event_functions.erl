@@ -16,4 +16,4 @@
 
 event_for_matching(SchedEvent) ->
 %%  so far, it is as simple as this is
-  SchedEvent#sched_event.what == received.
+  (SchedEvent#sched_event.what == received) or (SchedEvent#sched_event.what == rcv_crsh).

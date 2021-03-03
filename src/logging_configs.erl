@@ -30,7 +30,7 @@ get_config_for_readable(TestCaseName) ->
         "\n"]
     }},
     level => debug},
-  LogConfigReadable.
+  {FileName, LogConfigReadable}.
 
 get_config_for_machine(TestCaseName) ->
   FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
@@ -50,4 +50,4 @@ get_config_for_machine(TestCaseName) ->
         "}.\n"]
     }},
     level => debug},
-  LogConfigMachine.
+  {FileName, LogConfigMachine}.

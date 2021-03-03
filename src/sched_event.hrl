@@ -11,11 +11,11 @@
 -record(sched_event, {
                   what :: atom(), %% we could be more precise here
                   id = undefined :: number(),
-                  name = undefined :: string(),
-                  class = undefined :: string(),
-                  from = undefined :: string(),
-                  to = undefined :: string(),
+                  name = undefined :: atom() | undefined,
+                  class = undefined :: atom() | undefined,
+                  from = undefined :: atom() | undefined,
+                  to = undefined :: atom() | undefined,
                   mesg = undefined :: any(),
                   old_mesg = undefined :: any(),
-                  skipped = undefined :: list(number())
+                  skipped = undefined :: list(number()) | undefined
 }).

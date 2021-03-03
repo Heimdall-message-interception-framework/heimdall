@@ -23,8 +23,8 @@ assert_equal(First, Second) ->
   end.
 
 assert_equal_schedules(File1, File2) ->
-  Schedule1 = file:consult(File1),
-  Schedule2 = file:consult(File2),
+  {ok, Schedule1} = file:consult(File1),
+  {ok, Schedule2} = file:consult(File2),
   {_, EventsReplayed1} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule1),
   {_, EventsReplayed2} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule2),
   assert_equal(EventsReplayed1, EventsReplayed2).

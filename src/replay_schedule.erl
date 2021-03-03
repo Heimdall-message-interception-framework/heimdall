@@ -23,7 +23,7 @@
     encountered_unmatchable_event = false :: boolean(),
     messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}], % needed for backup scheduler
     backup_scheduler :: pid(),
-    message_interception_layer_id :: pid(),
+    message_interception_layer_id :: pid() | undefined,
     registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid())
 }).
 

@@ -15,8 +15,8 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-  message_interception_layer_id :: pid(),
-  messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}]
+  message_interception_layer_id :: pid() | undefined,
+  messages_in_transit = [] :: [{ID::number(), From::pid(), To::pid(), Msg::any()}]
 }).
 
 %%%===================================================================

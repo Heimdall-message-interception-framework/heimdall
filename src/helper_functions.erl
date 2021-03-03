@@ -34,7 +34,7 @@ firstmatch(CondFun, ReversedFront, Tail) ->
   case Tail of
     [] -> no_such_element;
     [X | Rest] -> case CondFun(X) of
-                    true -> {X, lists:reverse(ReversedFront) ++ Rest};
+                    true -> {found, X, lists:reverse(ReversedFront) ++ Rest};
                     false -> firstmatch(CondFun, [X | ReversedFront], Rest)
                   end
   end.

@@ -31,8 +31,11 @@ init([MessageCollector]) ->
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
-handle_cast({send_N_messages_with_interval, {N, To, Interval}}, State = #state{}) ->
-  erlang:display("will send by sender"),
+handle_cast({send_N_messages_with_interval, To, {N, Interval}}, State = #state{}) ->
+  send_N_messages_with_interval(State, N, To, Interval),
+  {noreply, State};
+%%
+handle_cast({casted, To, {send_N_messages_with_interval, N, Interval}}, State = #state{}) ->
   send_N_messages_with_interval(State, N, To, Interval),
   {noreply, State}.
 

@@ -70,9 +70,17 @@ handle_cast({register_client, {ClientName}}, State = #state{}) ->
   NewClientDict = orddict:store(ClientName, Pid, State#state.client_nodes),
   logger:info("regst_client", #{what => reg_clnt, name => ClientName}),
   {noreply, State#state{client_nodes = NewClientDict}};
+%%
+handle_cast({cast_msg, From, To, Message}, State = #state{}) ->
+%%handle_cast({cast_msg, From, To, {Message}}, State = #state{}) ->
+%%  this can be used to replay also the function calls to participants interacting (e.g. to initiate sending messages)
+  FromPid = node_pid(State, From),
+  ToPid = node_pid(State, To),
+  logger:info("cast_msg", #{what => cast_msg, from => From, to => To, mesg => Message}),
+  gen_server:cast(FromPid, {casted, ToPid, Message}),
+  {noreply, State};
+%%
 handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
-  erlang:display(FromPid),
-  erlang:display(State#state.registered_pid_nodes),
   From = pid_node(State, FromPid),
   To = pid_node(State, ToPid),
   Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
@@ -156,7 +164,6 @@ handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
 
 handle_info(trigger_get_events, State = #state{}) ->
   gen_server:cast(State#state.scheduler_id, {new_events, State#state.new_messages_in_transit}),
-  erlang:display("triggered get events"),
   restart_timer(),
   {noreply, State#state{new_messages_in_transit = []}}.
 

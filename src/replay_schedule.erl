@@ -53,22 +53,23 @@ handle_cast({start}, State = #state{}) ->
 handle_cast({new_events, ListNewMessages}, State = #state{}) ->
 %%  TODO: change to pulling for new events if going for this option
   UpdatedMessages = State#state.messages_in_transit ++ ListNewMessages,
-  erlang:display("receive new events start"),
   case State#state.encountered_unmatchable_event of
     true -> {noreply, State#state{messages_in_transit = UpdatedMessages}};
     false ->
       CondFun = fun({From, To, Msg}) -> (fun(Ev) -> (Ev#sched_event.from == From) and (Ev#sched_event.to == To) and (Ev#sched_event.mesg == Msg) end) end,
       {NewEnabledEvents, NewEventsToMatch, SkippedEvent} =
         try % {NewEnabledEvents, NewEventsToMatch, SkippedEvent} =
-          lists:foldl(fun({ID, From, To, Msg}, {EnabledEventsSoFar, EventsToMatchSoFar}) ->
-            case helper_functions:firstmatch(CondFun({From, To, Msg}, EventsToMatchSoFar)) of
-              {FoundID, RemainingEventsToMatch} ->
-                {orddict:store(ID, FoundID, EnabledEventsSoFar), RemainingEventsToMatch, none_skipped};
+          lists:foldl(fun({ID, From, To, Msg}, {EnabledEventsSoFar, EventsToMatchSoFar, _Skipped}) ->
+            CondiFun = CondFun({From, To, Msg}),
+            case helper_functions:firstmatch(CondiFun, EventsToMatchSoFar) of
+              {found, FoundEv, RemainingEventsToMatch} ->
+                {orddict:store(ID, FoundEv#sched_event.id, EnabledEventsSoFar), RemainingEventsToMatch, none_skipped};
               no_such_element ->
+%%                here skipped is the first message without a corresponding match
                 throw({skipped, {EnabledEventsSoFar, EventsToMatchSoFar, {skipped, {ID, From, To, Msg}}}})
             end
                       end,
-            {State#state.enabled_events, State#state.events_to_match},
+            {State#state.enabled_events, State#state.events_to_match, none_skipped},
             ListNewMessages)
         catch
           throw:{skipped, {Value}} -> Value
@@ -77,7 +78,6 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
         none_skipped -> NewEncounteredUnmatchable = false;
         {skipped, _} -> NewEncounteredUnmatchable = true
       end,
-      erlang:display("receive new events end"),
       gen_server:cast(self(), {try_next}),
       {noreply, State#state{messages_in_transit = UpdatedMessages,
         enabled_events = NewEnabledEvents,
@@ -89,11 +89,10 @@ handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}};
 %%
 handle_cast({try_next}, State = #state{}) ->
-%%  TODO: what if schedule is over? check whether there are still messages or the coverage goal??
+%%  TODO: currently, next signal for try_next a bit redundant
   case queue:out(State#state.events_to_replay) of
     {empty, _} -> {noreply, State};
     {{value, NextEvent}, TempEventsToReplay} ->
-      erlang:display(NextEvent),
       MIL = State#state.message_interception_layer_id,
       NewRegisteredNodesPid = case NextEvent#sched_event.what of
                                 reg_node ->
@@ -104,21 +103,18 @@ handle_cast({try_next}, State = #state{}) ->
       {NewMessagesInTransit, MatchableEnabled} =
         case orddict:is_key(NextEvent#sched_event.id, State#state.enabled_events) of
           true ->
-            erlang:display("enabled"),
             {ok, MatchedID} = orddict:find(NextEvent#sched_event.id, State#state.enabled_events),
             case NextEvent#sched_event.what of
               snd_orig ->
-                erlang:display("send original"),
                 cast_msg_and_notify(MIL, {send, {MatchedID, NextEvent#sched_event.from, NextEvent#sched_event.to}});
               snd_altr ->
                 cast_msg_and_notify(MIL, {send_altered, {MatchedID, NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg}});
               drop_msg ->
                 cast_msg_and_notify(MIL, {drop, {MatchedID, NextEvent#sched_event.from, NextEvent#sched_event.to}})
             end,
-            {_, TempMessagesInTransit} = helper_functions:firstmatch(fun(X) -> X#sched_event.id == MatchedID end, State#state.messages_in_transit),
+            {found, _, TempMessagesInTransit} = helper_functions:firstmatch(fun({Id, _, _, _}) -> Id == MatchedID end, State#state.messages_in_transit),
             {TempMessagesInTransit, true};
           false ->
-            erlang:display("not enabled"),
             {State#state.messages_in_transit, false}
         end,
       OtherEnabled =
@@ -127,6 +123,12 @@ handle_cast({try_next}, State = #state{}) ->
             %%      this is a helper case for testing, change if necessary
             {send_N_messages_with_interval, {N, To, Interval}} = NextEvent#sched_event.mesg,
             cast_msg_and_notify(node_pid(State, NextEvent#sched_event.to), {send_N_messages_with_interval, {N, node_pid(State, To), Interval}}),
+            logger:info("send_N_msgs_int", #{what => send_N_msgs_int, to => NextEvent#sched_event.to, mesg => {send_N_messages_with_interval, {N, To, Interval}}}),
+            true;
+          cast_msg ->
+            {From, To, Mesg} = {NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg},
+            cast_msg_and_notify(From, {casted, To, {Mesg}}),
+            logger:info("cast_msg", #{what => cast_msg, from => From, to => To, mesg => Mesg}),
             true;
           reg_node ->
             {ok, PidNew} = orddict:find(NextEvent#sched_event.name, NewRegisteredNodesPid),
@@ -154,12 +156,10 @@ handle_cast({try_next}, State = #state{}) ->
       case MatchableEnabled or OtherEnabled of
         false -> case State#state.encountered_unmatchable_event of
                    true -> gen_server:cast(self(), {start_backup_scheduler});
-                   _ -> erlang:display("keep it"),
-                     erlang:send_after(?INTERVAL, self(), trigger_get_events)
+                   false -> erlang:send_after(?INTERVAL, self(), trigger_get_events)
                  end,
                  State#state.events_to_replay;
-        true -> erlang:display("next one"),
-                gen_server:cast(self(), {try_next}),
+        true -> gen_server:cast(self(), {try_next}),
                 TempEventsToReplay
       end,
       {noreply, State#state{messages_in_transit = NewMessagesInTransit,

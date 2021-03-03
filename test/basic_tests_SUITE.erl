@@ -18,11 +18,11 @@
   init_per_testcase/2, end_per_testcase/2]).
 
 all() -> [
-          mil_naive_scheduler_test
-%%          mil_naive_same_payload_scheduler_test,
-%%          mil_client_req_test,
-%%          mil_drop_tests,
-%%          mil_trans_crash_test
+          mil_naive_scheduler_test,
+          mil_naive_same_payload_scheduler_test,
+          mil_client_req_test,
+          mil_drop_tests,
+          mil_trans_crash_test
          ].
 
 init_per_suite(Config) ->
@@ -57,8 +57,8 @@ mil_naive_scheduler_test(_Config) ->
   gen_server:cast(MIL, {start}),
 %%  send the messages
   timer:sleep(100), % wait first a bit so that logging is in sync
-  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
-  send_N_messages_with_interval(10, DummySender2, ds2, DummyReceiver2, dr2, 75),
+  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
+  send_N_messages_with_interval(MIL, 10, ds2, dr2, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
@@ -80,8 +80,8 @@ mil_naive_same_payload_scheduler_test(_Config) ->
   gen_server:cast(MIL, {register, {ds2, DummySender2, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
-  send_N_messages_with_interval(10, DummySender2, ds2, DummyReceiver2, dr2, 75),
+  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
+  send_N_messages_with_interval(MIL, 10, ds2, dr2, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
@@ -112,7 +112,7 @@ mil_drop_tests(_Config) ->
   gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
+  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   helper_functions:assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
@@ -128,13 +128,12 @@ mil_trans_crash_test(_Config) ->
   gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
   gen_server:cast(MIL, {start}),
 %%  send the messages
-  send_N_messages_with_interval(10, DummySender1, ds1, DummyReceiver1, dr1, 75),
+  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   helper_functions:assert_equal(ReceivedMessages1, [10,9,8]).
 
 
 %% internal for replaying
-send_N_messages_with_interval(N, From, FromName, To, ToName, Interval) ->
-  gen_server:cast(From, {send_N_messages_with_interval, {N, To, Interval}}),
-  logger:info("send_N_msgs_int", #{what => send_N_msgs_int, to => FromName, mesg => {send_N_messages_with_interval, {N, ToName, Interval}}}).
+send_N_messages_with_interval(MIL, N, From, To, Interval) ->
+  gen_server:cast(MIL, {cast_msg, From, To, {send_N_messages_with_interval, N, Interval}}).

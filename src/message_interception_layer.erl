@@ -26,8 +26,10 @@
   messages_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
                                         queue:queue({ID::any(), Payload::any()})),
   new_messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}],
+%%  scheduler_id is only used to send the new_events, we could also request these with the scheduler
   scheduler_id :: pid(),
-  id_counter = 0 :: any()
+  id_counter = 0 :: any(),
+  bc_nodes = sets:new() :: sets:set(atom())
 }).
 
 %%%===================================================================
@@ -40,6 +42,12 @@ start(Scheduler) ->
 init([Scheduler]) ->
   {ok, #state{scheduler_id = Scheduler}}.
 
+handle_call({all_bc_pids}, _From, State = #state{}) ->
+  AllPids = lists:map(fun(Name) -> node_pid(State, Name) end, sets:to_list(State#state.bc_nodes)),
+  {reply, AllPids, State};
+handle_call({reg_bc_node, {NodeName}}, _From, State = #state{}) ->
+  NewBcNodes = sets:add_element(NodeName, State#state.bc_nodes),
+  {reply, ok, State#state{bc_nodes = NewBcNodes}};
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -189,7 +197,7 @@ client_pid(State, Node) ->
   Pid.
 
 send_msg(State, From, To, Msg) ->
-  gen_server:cast(To, {message, node_pid(State, From), node_pid(State, To), Msg}).
+  gen_server:cast(node_pid(State, To), {message, node_pid(State, From), node_pid(State, To), Msg}).
 
 send_client_req(State, From, To, Msg) ->
   gen_server:cast(To, {message, client_pid(State, From), node_pid(State, To), Msg}).

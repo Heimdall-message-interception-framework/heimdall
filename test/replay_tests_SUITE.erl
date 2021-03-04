@@ -17,12 +17,11 @@
   replay_naive_scheduler_same_payload_test/1, replay_naive_schedule_test/1, replay_client_req_test/1, replay_drop_req_test/1, replay_trans_crash_test/1]).
 
 all() -> [
-%%  replay_naive_schedule_test
-%%  replay_naive_scheduler_same_payload_test
-%%  replay_client_req_test
-%%  replay_drop_req_test
+  replay_naive_schedule_test,
+  replay_naive_scheduler_same_payload_test,
+  replay_client_req_test,
+  replay_drop_req_test,
   replay_trans_crash_test
-%%  small_test
 ].
 
 init_per_suite(Config) ->

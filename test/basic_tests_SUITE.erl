@@ -18,10 +18,10 @@
   init_per_testcase/2, end_per_testcase/2]).
 
 all() -> [
-%%          mil_naive_scheduler_test,
-%%          mil_naive_same_payload_scheduler_test,
-%%          mil_client_req_test,
-%%          mil_drop_tests,
+          mil_naive_scheduler_test,
+          mil_naive_same_payload_scheduler_test,
+          mil_client_req_test,
+          mil_drop_tests,
           mil_trans_crash_test
          ].
 

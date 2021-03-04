@@ -7,3 +7,9 @@ Build
 -----
 
     $ rebar3 compile
+
+
+Typecheck
+-----
+
+    $ rebar3 dialyzer

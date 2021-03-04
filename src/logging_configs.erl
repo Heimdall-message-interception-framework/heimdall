@@ -13,6 +13,7 @@
 -export([get_config_for_readable/1, get_config_for_machine/1]).
 %%  TODO: add filter if "what" is undefined
 
+-spec get_config_for_readable(atom()) -> {string(), #{config := term(), formatter := term(), level := atom()}}.
 get_config_for_readable(TestCaseName) ->
   FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++ "__readable.sched",
@@ -32,6 +33,7 @@ get_config_for_readable(TestCaseName) ->
     level => debug},
   {FileName, LogConfigReadable}.
 
+-spec get_config_for_machine(atom()) -> {string(), #{config := term(), formatter := term(), level := atom()}}.
 get_config_for_machine(TestCaseName) ->
   FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++  "__machine.sched",

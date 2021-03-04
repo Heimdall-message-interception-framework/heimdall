@@ -35,20 +35,15 @@
 %%%===================================================================
 
 start(Scheduler) ->
-  {ok, MIL} = gen_server:start_link(?MODULE, [Scheduler], []),
-  {ok, MIL}.
+  gen_server:start_link(?MODULE, [Scheduler], []).
 
 init([Scheduler]) ->
-  {
-    ok, #state{
-               scheduler_id = Scheduler
-    }
-  }.
+  {ok, #state{scheduler_id = Scheduler}}.
 
-handle_call(_Request, _From, State = #state{}) ->
+handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({start}, State = #state{}) ->
+handle_cast({start}, State) ->
   erlang:send_after(?INTERVAL, self(), trigger_get_events),
   {noreply, State};
 %%

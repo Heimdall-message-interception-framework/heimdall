@@ -10,39 +10,22 @@
 -author("fms").
 
 %% API
--export([get_readable_time/0, assert_equal/2, firstmatch/2, assert_equal_schedules/2]).
+-export([get_readable_time/0, remove_firstmatch/2]).
 
+- spec get_readable_time() -> [char()].
 get_readable_time() ->
   {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:now_to_datetime(erlang:timestamp()),
   io_lib:format("~.4.0w-~.2.0w-~.2.0w-~.2.0w:~.2.0w:~.2.0w", [Year, Month, Day, Hour, Min, Sec]).
 
-assert_equal(First, Second) ->
-  case First == Second of
-    true -> ok;
-    false -> ct:fail("not the same")
-  end.
 
-assert_equal_schedules(File1, File2) ->
-  {ok, Schedule1} = file:consult(File1),
-  {ok, Schedule2} = file:consult(File2),
-  {_, EventsReplayed1} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule1),
-  {_, EventsReplayed2} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule2),
-  assert_equal(EventsReplayed1, EventsReplayed2).
+- spec remove_firstmatch(fun((T) -> boolean()), [T]) -> no_such_element | {found, T, [T]}.
+remove_firstmatch(CondFun, SomeList) ->
+  remove_firstmatch(CondFun, [], SomeList).
 
-
-firstmatch(CondFun, SomeList) ->
-  firstmatch(CondFun, [], SomeList).
-%%  case lists:dropwhile(fun(x) -> not CondFun(x) end, SomeList) of
-%%    [] -> no_such_element;
-%%    [X | _] -> X
-%%  end.
-
-
-firstmatch(CondFun, ReversedFront, Tail) ->
-  case Tail of
-    [] -> no_such_element;
-    [X | Rest] -> case CondFun(X) of
-                    true -> {found, X, lists:reverse(ReversedFront) ++ Rest};
-                    false -> firstmatch(CondFun, [X | ReversedFront], Rest)
-                  end
+remove_firstmatch(_CondFun, _ReversedFront, []) ->
+  no_such_element;
+remove_firstmatch(CondFun, ReversedFront, [X | Rest]) ->
+  case CondFun(X) of
+    true -> {found, X, lists:reverse(ReversedFront) ++ Rest};
+    false -> remove_firstmatch(CondFun, [X | ReversedFront], Rest)
   end.

@@ -64,8 +64,8 @@ mil_naive_scheduler_test(_Config) ->
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
-  helper_functions:assert_equal(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
-  helper_functions:assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]).
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
+  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]).
 
 
 mil_naive_same_payload_scheduler_test(_Config) ->
@@ -87,8 +87,8 @@ mil_naive_same_payload_scheduler_test(_Config) ->
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
-  helper_functions:assert_equal(ReceivedMessages1, [1,1,1,1,1,1,1,1,1,1,1]),
-  helper_functions:assert_equal(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
+  assert_equal(ReceivedMessages1, [1,1,1,1,1,1,1,1,1,1,1]),
+  assert_equal(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
 
 
 mil_client_req_test(_Config) ->
@@ -102,7 +102,7 @@ mil_client_req_test(_Config) ->
   gen_server:cast(MIL, {client_req, {client1, dr1, "client_req"}}),
   timer:sleep(100),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  helper_functions:assert_equal(ReceivedMessages1, ["client_req"]).
+  assert_equal(ReceivedMessages1, ["client_req"]).
 
 mil_drop_tests(_Config) ->
   {ok, Scheduler} = scheduler_naive_dropping:start(),
@@ -117,7 +117,7 @@ mil_drop_tests(_Config) ->
   send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  helper_functions:assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
 
 mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
@@ -133,9 +133,22 @@ mil_trans_crash_test(_Config) ->
   send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  helper_functions:assert_equal(ReceivedMessages1, [10,9,8]).
+  assert_equal(ReceivedMessages1, [10,9,8]).
 
 
 %% internal for replaying
 send_N_messages_with_interval(MIL, N, From, To, Interval) ->
   gen_server:cast(MIL, {cast_msg, From, To, {send_N_messages_with_interval, N, Interval}}).
+
+assert_equal(First, Second) ->
+  case First == Second of
+    true -> ok;
+    false -> ct:fail("not the same")
+  end.
+
+assert_equal_schedules(File1, File2) ->
+  {ok, Schedule1} = file:consult(File1),
+  {ok, Schedule2} = file:consult(File2),
+  {_, EventsReplayed1} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule1),
+  {_, EventsReplayed2} = lists:partition(fun(Ev) -> sched_event_functions:event_for_matching(Ev) end, Schedule2),
+  assert_equal(EventsReplayed1, EventsReplayed2).

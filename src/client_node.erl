@@ -28,20 +28,20 @@ start(Name, MIL) ->
 init([MIL]) ->
   {ok, #state{message_interception_layer_id = MIL}}.
 
-handle_call(_Request, _From, State = #state{}) ->
+handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{}) ->
-  gen_server:cast(State#state.message_interception_layer_id, {fwd_client_req, {ClientName, Coordinator, ClientCmd}}),
+handle_cast({client_req, ClientName, Coordinator, ClientCmd}, State = #state{message_interception_layer_id = MIL}) ->
+  gen_server:cast(MIL, {fwd_client_req, {ClientName, Coordinator, ClientCmd}}),
   {noreply, State}.
 
-handle_info(_Info, State = #state{}) ->
+handle_info(_Info, State) ->
   {noreply, State}.
 
-terminate(_Reason, _State = #state{}) ->
+terminate(_Reason, _State) ->
   ok.
 
-code_change(_OldVsn, State = #state{}, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 %%%===================================================================

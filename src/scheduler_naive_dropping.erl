@@ -41,13 +41,13 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
 handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}}.
 
-handle_info(_Info, State = #state{}) ->
+handle_info(_Info, State) ->
   {noreply, State}.
 
-terminate(_Reason, _State = #state{}) ->
+terminate(_Reason, _State) ->
   ok.
 
-code_change(_OldVsn, State = #state{}, _Extra) ->
+code_change(_OldVsn, State, _Extra) ->
   {ok, State}.
 
 %%%===================================================================
@@ -57,13 +57,12 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element
-  case length(State#state.messages_in_transit) == 0 of
-    true ->  {State, {noop, {}}} ;
-    false ->
-      [{ID,F,T,M} | Tail] = State#state.messages_in_transit,
-      case M == 5 of
-        true -> {State#state{messages_in_transit = Tail}, {drop, {ID,F,T}}};
-        false -> {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
+  case State#state.messages_in_transit of
+    [] ->  {State, {noop, {}}} ;
+    [{ID,F,T,M} | Tail] ->
+    case M of
+        5 -> {State#state{messages_in_transit = Tail}, {drop, {ID,F,T}}};
+        _ -> {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
       end
   end.
 

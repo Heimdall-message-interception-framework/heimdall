@@ -61,7 +61,7 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
         try % {NewEnabledEvents, NewEventsToMatch, SkippedEvent} =
           lists:foldl(fun({ID, From, To, Msg}, {EnabledEventsSoFar, EventsToMatchSoFar, _Skipped}) ->
             CondiFun = CondFun({From, To, Msg}),
-            case helper_functions:firstmatch(CondiFun, EventsToMatchSoFar) of
+            case helper_functions:remove_firstmatch(CondiFun, EventsToMatchSoFar) of
               {found, FoundEv, RemainingEventsToMatch} ->
                 {orddict:store(ID, FoundEv#sched_event.id, EnabledEventsSoFar), RemainingEventsToMatch, none_skipped};
               no_such_element ->
@@ -114,7 +114,7 @@ handle_cast({try_next}, State = #state{}) ->
               drop_msg ->
                 cast_msg_and_notify(MIL, {drop, {MatchedID, NextEvent#sched_event.from, NextEvent#sched_event.to}})
             end,
-            {found, _, TempMessagesInTransit} = helper_functions:firstmatch(fun({Id, _, _, _}) -> Id == MatchedID end, State#state.messages_in_transit),
+            {found, _, TempMessagesInTransit} = helper_functions:remove_firstmatch(fun({Id, _, _, _}) -> Id == MatchedID end, State#state.messages_in_transit),
             {TempMessagesInTransit, true};
           false ->
             case NextEvent#sched_event.what of

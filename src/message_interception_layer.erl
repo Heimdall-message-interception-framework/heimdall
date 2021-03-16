@@ -117,6 +117,12 @@ handle_cast({send, {Id, From, To}}, State = #state{}) ->
   logger:info("snd_orig", #{what => snd_orig, id => Id, from => From, to => To, mesg => M, skipped => Skipped}),
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
+handle_cast({duplicate, {Id, From, To}}, State = #state{}) ->
+  {M, Skipped} = find_message(State, Id, From, To),
+  send_msg(State, From, To, M),
+  logger:info("duplicat", #{what => duplicat, id => Id, from => From, to => To, mesg => M, skipped => Skipped}),
+  {noreply, State};
+%%
 handle_cast({send_altered, {Id, From, To, New_payload}}, State = #state{}) ->
   {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, New_payload),
@@ -234,4 +240,8 @@ find_message_and_get_upated_messages_in_transit(State, Id, From, To) ->
   NewMessageStore = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),
   {M, Skipped, NewMessageStore}.
 
+find_message(State, Id, From, To) ->
+  QueueToSearch = orddict:fetch({From, To}, State#state.messages_in_transit),
+  {M, Skipped, _} = find_id_in_queue(QueueToSearch, Id),
+  {M, Skipped}.
 

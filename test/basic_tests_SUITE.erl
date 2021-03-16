@@ -15,14 +15,15 @@
   mil_drop_tests/1,
   mil_trans_crash_test/1,
   init_per_suite/1, end_per_suite/1,
-  init_per_testcase/2, end_per_testcase/2]).
+  init_per_testcase/2, end_per_testcase/2, mil_duplicate_test/1]).
 
 all() -> [
-          mil_naive_scheduler_test,
-          mil_naive_same_payload_scheduler_test,
-          mil_client_req_test,
-          mil_drop_tests,
-          mil_trans_crash_test
+%%          mil_naive_scheduler_test,
+%%          mil_naive_same_payload_scheduler_test,
+%%          mil_client_req_test,
+%%          mil_drop_tests,
+%%          mil_trans_crash_test,
+          mil_duplicate_test
          ].
 
 init_per_suite(Config) ->
@@ -134,6 +135,22 @@ mil_trans_crash_test(_Config) ->
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   assert_equal(ReceivedMessages1, [10,9,8]).
+
+mil_duplicate_test(_Config) ->
+%%  TODO: add deterministic case where second queue is also erased
+  {ok, Scheduler} = scheduler_naive_duplicate_msg:start(5),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
+  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
+  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
+  gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
+  gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
+  gen_server:cast(MIL, {start}),
+%%  send the messages
+  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
+  timer:sleep(2500),
+  ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,5,5,4,3,2,1,0]).
 
 
 %% internal for replaying

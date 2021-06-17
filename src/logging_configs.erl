@@ -15,6 +15,7 @@
 
 -spec get_config_for_readable(atom()) -> {string(), #{config := term(), formatter := term(), level := atom()}}.
 get_config_for_readable(TestCaseName) ->
+  erlang:display(c:pwd()),
   FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++ "__readable.sched",
   LogConfigReadable = #{config => #{file => FileName},
@@ -38,6 +39,7 @@ get_config_for_machine(TestCaseName) ->
   FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++  "__machine.sched",
   LogConfigMachine = #{config => #{file => FileName},
+%%    TODO: change formatter in a way that it check whether it is a sched_event
     formatter => {logger_formatter, #{
       template =>  ["{sched_event, ",
         {what, [what], ["undefined"]}, ", ",

@@ -56,6 +56,7 @@ handle_cast({start}, State) ->
   {noreply, State};
 %%
 handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
+  erlang:display(atom_to_list(NodeName) ++ " registered with " ++ pid_to_list(NodePid)),
   NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
   NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names(State),
@@ -74,7 +75,9 @@ handle_cast({register_client, {ClientName}}, State = #state{}) ->
   logger:info("regst_client", #{what => reg_clnt, name => ClientName}),
   {noreply, State#state{client_nodes = NewClientDict}};
 %%
+%% TODO: case distinction about name and pid here with condition?
 handle_cast({cast_msg, From, To, Message}, State = #state{}) ->
+  erlang:display("cast_msg"),
 %%handle_cast({cast_msg, From, To, {Message}}, State = #state{}) ->
 %%  this can be used to replay also the function calls to participants interacting (e.g. to initiate sending messages)
   FromPid = node_pid(State, From),
@@ -83,9 +86,15 @@ handle_cast({cast_msg, From, To, Message}, State = #state{}) ->
   gen_server:cast(FromPid, {casted, ToPid, Message}),
   {noreply, State};
 %%
-handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
+handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{})
+  when not is_tuple(ToPid)->
+%%  erlang:display(["FromPid", FromPid, "ToPid", ToPid]),
   From = pid_node(State, FromPid),
-  To = pid_node(State, ToPid),
+  To = case is_pid(ToPid) of
+         true -> pid_node(State, ToPid);
+         _ -> ToPid
+       end,
+%%  erlang:display(["From", From, "To", To]),
   Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
   Bool_whitelisted = check_if_whitelisted(From, To, Payload),
   if
@@ -108,11 +117,38 @@ handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{}) ->
         id_counter = NextID}}
   end;
 %%
+handle_cast({bang, {FromPid, {To, Node}, Payload}}, State = #state{}) ->
+%%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
+%%  erlang:display(["FromPid", FromPid, "ToPid", To]),
+  From = pid_node(State, FromPid),
+%%  erlang:display(["From", From, "To", To]),
+  Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
+  Bool_whitelisted = check_if_whitelisted(From, To, Payload),
+  if
+    Bool_crashed ->
+%%      still log this event for matching later on
+      logger:info("rcv_crsh", #{what => rcv_crsh, id => State#state.id_counter, from => From, to => To, mesg => Payload}),
+      NextID = State#state.id_counter + 1,
+      {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
+    Bool_whitelisted -> send_msg(State, FromPid, {To, Node}, Payload),
+      {noreply, State};
+    true ->
+      QueueToUpdate = orddict:fetch({From, To}, State#state.messages_in_transit),
+      UpdatedQueue = queue:in({State#state.id_counter, Payload}, QueueToUpdate),
+      UpdatedMessagesInTransit = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),
+      UpdatedNewMessagesInTransit = State#state.new_messages_in_transit ++ [{State#state.id_counter, From, To, Payload}],
+      logger:info("received", #{what => received, id => State#state.id_counter, from => From, to => To, mesg => Payload}),
+      NextID = State#state.id_counter + 1,
+      {noreply, State#state{messages_in_transit = UpdatedMessagesInTransit,
+        new_messages_in_transit = UpdatedNewMessagesInTransit,
+        id_counter = NextID}}
+  end;
+%%
 handle_cast({noop, {}}, State = #state{}) ->
   {noreply, State};
 %%
 handle_cast({send, {Id, From, To}}, State = #state{}) ->
-  {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+  {M, Skipped, NewMessageStore} = find_message_and_get_updated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, M),
   logger:info("snd_orig", #{what => snd_orig, id => Id, from => From, to => To, mesg => M, skipped => Skipped}),
   {noreply, State#state{messages_in_transit = NewMessageStore}};
@@ -124,19 +160,19 @@ handle_cast({duplicate, {Id, From, To}}, State = #state{}) ->
   {noreply, State};
 %%
 handle_cast({send_altered, {Id, From, To, New_payload}}, State = #state{}) ->
-  {M, Skipped, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+  {M, Skipped, NewMessageStore} = find_message_and_get_updated_messages_in_transit(State, Id, From, To),
   send_msg(State, From, To, New_payload),
   logger:info("snd_altr", #{what => snd_altr, id => Id, from => From, to => To, mesg => New_payload, old_mesg => M, skipped => Skipped}),
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({drop, {Id, From, To}}, State = #state{}) ->
-  {M, _, NewMessageStore} = find_message_and_get_upated_messages_in_transit(State, Id, From, To),
+  {M, _, NewMessageStore} = find_message_and_get_updated_messages_in_transit(State, Id, From, To),
   logger:info("drop_msg", #{what => drop_msg, id => Id, from => From, to => To, mesg => M}),
 %%  maybe check whether Skipped is empty and report if not
   {noreply, State#state{messages_in_transit = NewMessageStore}};
 %%
 handle_cast({client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
-%%  TODO: once connected with riak, submit the request to be executed by one of the clients; Coordinator is the node to contact
+%%  TODO: once connected with application, submit the request to be executed by one of the clients; Coordinator is the node to contact
   gen_server:cast(client_pid(State, ClientName), {client_req, ClientName, Coordinator, ClientCmd}),
   logger:info("clnt_req", #{what => clnt_req, from => ClientName, to => Coordinator, mesg => ClientCmd}),
   {noreply, State};
@@ -234,7 +270,7 @@ find_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
     false -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
   end.
 
-find_message_and_get_upated_messages_in_transit(State, Id, From, To) ->
+find_message_and_get_updated_messages_in_transit(State, Id, From, To) ->
   QueueToSearch = orddict:fetch({From, To}, State#state.messages_in_transit),
   {M, Skipped, UpdatedQueue} = find_id_in_queue(QueueToSearch, Id),
   NewMessageStore = orddict:store({From, To}, UpdatedQueue, State#state.messages_in_transit),

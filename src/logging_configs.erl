@@ -16,7 +16,7 @@
 -spec get_config_for_readable(atom()) -> {string(), #{config := term(), formatter := term(), level := atom()}}.
 get_config_for_readable(TestCaseName) ->
   erlang:display(c:pwd()),
-  FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
+  FileName = "./../../../../logs/schedules/" ++ msg_interception_helpers:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++ "__readable.sched",
   LogConfigReadable = #{config => #{file => FileName},
     formatter => {logger_formatter, #{
@@ -29,6 +29,9 @@ get_config_for_readable(TestCaseName) ->
         {mesg, [" Msg: ", mesg, "\t"], []},
         {old_mesg, [" Old Msg: ", old_mesg, "\t"], []},
         {skipped, [" Skipped: ", skipped, "\t"], []},
+        {mod, ["Module: ", mod, "\t"], []},
+        {func, [" Func: ", func, "\t"], []},
+        {args, [" Args: ", args, "\t"], []},
         "\n"]
     }},
     level => debug},
@@ -36,7 +39,7 @@ get_config_for_readable(TestCaseName) ->
 
 -spec get_config_for_machine(atom()) -> {string(), #{config := term(), formatter := term(), level := atom()}}.
 get_config_for_machine(TestCaseName) ->
-  FileName = "./../../../../logs/schedules/" ++ helper_functions:get_readable_time() ++ "_" ++
+  FileName = "./../../../../logs/schedules/" ++ msg_interception_helpers:get_readable_time() ++ "_" ++
               erl_types:atom_to_string(TestCaseName) ++  "__machine.sched",
   LogConfigMachine = #{config => #{file => FileName},
 %%    TODO: change formatter in a way that it check whether it is a sched_event
@@ -51,6 +54,9 @@ get_config_for_machine(TestCaseName) ->
         {mesg, [mesg], ["undefined"]}, ", ",
         {old_mesg, [old_mesg], ["undefined"]}, ", ",
         {skipped, [skipped], ["undefined"]},
+        {mod, [mod], ["undefined"]}, ", ",
+        {func, [func], ["undefined"]}, ", ",
+        {args, [args], ["undefined"]},
         "}.\n"]
     }},
     level => debug},

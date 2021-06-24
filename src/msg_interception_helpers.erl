@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 01. Mar 2021 09:10
 %%%-------------------------------------------------------------------
--module(helper_functions).
+-module(msg_interception_helpers).
 -author("fms").
 
 %% API

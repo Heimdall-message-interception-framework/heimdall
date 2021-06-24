@@ -62,9 +62,9 @@ no_crash_test(_Config) ->
     receive {Chat1, Received1} -> ok end,
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
-    helper_functions:assert_equal(['Hello everyone!'], Received1),
-    helper_functions:assert_equal(['Hello everyone!'], Received2),
-    helper_functions:assert_equal(['Hello everyone!'], Received3).
+    msg_interception_helpers:assert_equal(['Hello everyone!'], Received1),
+    msg_interception_helpers:assert_equal(['Hello everyone!'], Received2),
+    msg_interception_helpers:assert_equal(['Hello everyone!'], Received3).
 
 
 
@@ -92,6 +92,6 @@ with_crash_test() ->
     % We can only expect, that Chat2 has received the message:
     Chat2 ! {get_received, self()},
     receive {Chat2, Received2} -> ok end,
-    helper_functions:assert_equal(['Hello everyone!'], Received2).
+    msg_interception_helpers:assert_equal(['Hello everyone!'], Received2).
 
 

@@ -17,5 +17,8 @@
                   to = undefined :: atom() | undefined,
                   mesg = undefined :: any(),
                   old_mesg = undefined :: any(),
-                  skipped = undefined :: list(number()) | undefined
+                  skipped = undefined :: list(number()) | undefined,
+                  mod = undefined :: atom() | undefined,
+                  func = undefined :: atom() | undefined,
+                  args = undefined :: list(any()) | undefined
 }).

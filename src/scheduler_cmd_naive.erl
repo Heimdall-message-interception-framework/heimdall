@@ -23,6 +23,9 @@
 start_scheduler(Scheduler) ->
   gen_server:cast(Scheduler, {start}).
 
+send_next_scheduling_instr(Scheduler) ->
+  gen_server:cast(Scheduler, {send_next_sched}).
+
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
@@ -45,8 +48,16 @@ handle_cast({new_events, ListNewCommands}, State = #state{}) ->
                     "ListNewCommands", ListNewCommands,
                     "CommandsSoFar", State#state.commands_in_transit]),
   UpdatedCommands = State#state.commands_in_transit ++ ListNewCommands,
-  CmdUpdatedState = State#state{commands_in_transit = UpdatedCommands},
-  Result = next_event_and_state(CmdUpdatedState),
+  send_next_scheduling_instr(self()), % react to new events with new scheduled events
+  {noreply, State#state{commands_in_transit = UpdatedCommands}};
+%%
+handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
+  {noreply, State#state{message_interception_layer_id = MIL}};
+%%
+handle_cast({send_next_sched}, State = #state{}) ->
+%%  Result = next_event_and_state(State),
+%%  erlang:display("exit sched_cmd_naive 64"),
+  Result = next_event_and_state(State),
   case Result of
     {NextState, {ID, From, To, Mod, Func, Args}} ->
       erlang:display("sched_cmd_naive:41, reach here"),
@@ -55,22 +66,20 @@ handle_cast({new_events, ListNewCommands}, State = #state{}) ->
       {noreply, NextState};
     {NextState, {noop, {}}} ->
       {noreply, NextState}
-  end;
-handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
-  {noreply, State#state{message_interception_layer_id = MIL}}.
-%%
-handle_info(trigger_send_next, State = #state{}) ->
-  Result = next_event_and_state(State#state.commands_in_transit),
-  restart_timer(),
-  case Result of
-    {NextState, {ID, From, To, Mod, Func, Args}} ->
-      erlang:display("sched_cmd_naive:61, reach here"),
-      MIL = State#state.message_interception_layer_id,
-      message_interception_layer:exec_msg_command(MIL, ID, From, To, Mod, Func, Args),
-      {noreply, NextState};
-    {NextState, {noop, {}}} ->
-      {noreply, NextState}
-  end;
+  end.
+%%  case Result of
+%%    {NextState, {ID, From, To, Mod, Func, Args}} ->
+%%      erlang:display("sched_cmd_naive:61, reach here"),
+%%      MIL = State#state.message_interception_layer_id,
+%%      message_interception_layer:exec_msg_command(MIL, ID, From, To, Mod, Func, Args),
+%%      {noreply, NextState};
+%%    {NextState, {noop, {}}} ->
+%%      {noreply, NextState}
+%%  end.
+
+handle_info(trigger_send_next, _State) ->
+  send_next_scheduling_instr(self()),
+  restart_timer();
 %%
 handle_info(_Info, State) ->
   {noreply, State}.
@@ -85,9 +94,9 @@ code_change(_OldVsn, State, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
 next_event_and_state(State) ->
 %% this one simply returns the first element
+  erlang:display("enter sched_cmd_naive 91"),
   case State#state.commands_in_transit of
     [] -> {State, {noop, {}}} ;
     [{ID,F,T,Mod,Func,Args} | Tail] ->

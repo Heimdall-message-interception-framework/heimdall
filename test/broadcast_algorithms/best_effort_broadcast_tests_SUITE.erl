@@ -82,14 +82,10 @@ no_crash_test(_Config) ->
     NamesPids = lists:map(fun(Name) ->
         {ok, Pid} = link_layer_dummy_node:start(MIL, Name),
         {Name, Pid}
-                      end, TestNodes),
     [{nodeA, LL1}, {nodeB, LL2}, {nodeC, LL3}] = NamesPids,
 
     lists:map(fun({Name, Pid}) -> gen_server:cast(MIL, {register, {Name, Pid, link_layer_dummy_node}}) end, NamesPids),
     lists:map(fun({Name, _}) -> gen_server:call(MIL, {reg_bc_node, {Name}}) end, NamesPids),
-
-    % Create 3 chat servers:
-    Chat1 = spawn_link(fun() -> chat_loop(MIL, LL1, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop(MIL, LL2, bc2, []) end),
     Chat3 = spawn_link(fun() -> chat_loop(MIL, LL3, bc3, []) end),
 
@@ -169,14 +165,14 @@ with_crash_test() ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2).
 
 with_crash_test_simple(_Config) ->
+<<<<<<< HEAD
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
-
-    % Create 3 chat servers:
+=======
+    % Create dummy link layer for testing:
+    {ok, LL} = link_layer_simple:start(),
     Chat1 = spawn_link(fun() -> chat_loop_simplified(LL, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop_simplified(LL, bc2, []) end),
-    Chat3 = spawn_link(fun() -> chat_loop_simplified(LL, bc3, []) end),
-
     % crash chatserver 2 after 1 second
     timer:sleep(1000),
     process_flag(trap_exit, true),

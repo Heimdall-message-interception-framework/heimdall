@@ -159,7 +159,6 @@ assert_equal(First, Second) ->
   case First == Second of
     true -> ok;
     false -> ct:fail("not the same: ~p ~p", [First,Second])
-
   end.
 
 assert_equal_schedules(File1, File2) ->

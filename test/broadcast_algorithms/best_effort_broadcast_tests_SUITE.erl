@@ -165,10 +165,8 @@ with_crash_test() ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2).
 
 with_crash_test_simple(_Config) ->
-<<<<<<< HEAD
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
-=======
     % Create dummy link layer for testing:
     {ok, LL} = link_layer_simple:start(),
     Chat1 = spawn_link(fun() -> chat_loop_simplified(LL, bc1, []) end),

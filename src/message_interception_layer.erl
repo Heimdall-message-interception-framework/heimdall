@@ -12,7 +12,7 @@
 
 -export([start_msg_int_layer/1, register_with_name/4, register_client/2, cast_msg/4, no_op/1,
   duplicate_msg/4, send_altered_msg/5, drop_msg/4, client_req/4, forward_client_req/4, transient_crash/2, rejoin/2,
-  permanent_crash/2, send_msg/4, msg_to_be_sent/4, msg_command/6, exec_msg_command/7]).
+  permanent_crash/2, send_msg/4, msg_to_be_sent/4, msg_command/6, exec_msg_command/7, enable_timeout/3, disable_timeout/3]).
 -export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -32,6 +32,7 @@
   commands_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
                               queue:queue({ID::any(), Module::atom(), Function::atom(), Args::list(any())})),
   new_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
+  enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(), queue:queue(any())),
 %%  scheduler_id is only used to send the new_events, we could also request these with the scheduler
   scheduler_id :: pid(),
   id_counter = 0 :: any(),
@@ -71,6 +72,15 @@ msg_command(MIL, From, To, Module, Fun, Args) ->
 
 exec_msg_command(MIL, ID, From, To, Module, Fun, Args) ->
   gen_server:cast(MIL, {exec_msg_cmd, {ID, From, To, Module, Fun, Args}}).
+
+enable_timeout(MIL, Proc, MsgRef) ->
+  enable_timeout(MIL, Proc, MsgRef, undefined).
+
+enable_timeout(MIL, Proc, MsgRef, MsgContent) ->
+  gen_server:cast(MIL, {enable_to, {Proc, Proc, erlang, send, [{mil_timeout, MsgRef, MsgContent}]}}).
+
+disable_timeout(MIL, Proc, MsgRef) ->
+  gen_server:cast(MIL, {disable_to, {Proc, MsgRef}}).
 
 msg_to_be_sent(MIL, From, {To, _Node}, Payload) ->
 %%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
@@ -149,9 +159,11 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   Fun = fun({_, _}, _, _) -> undefined end,
   NewMessageStore = orddict:merge(Fun, State#state.messages_in_transit, MsgOrddictNewQueues),
   NewCommandStore = orddict:merge(Fun, State#state.commands_in_transit, CmdOrddictNewQueues),
+  NewTimeoutList = orddict:store(NodeName, queue:new(), State#state.enabled_timeouts),
   logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
-                        messages_in_transit = NewMessageStore, commands_in_transit = NewCommandStore}};
+                        messages_in_transit = NewMessageStore, commands_in_transit = NewCommandStore,
+                        enabled_timeouts = NewTimeoutList}};
 %%
 handle_cast({register_client, {ClientName}}, State = #state{}) ->
   {ok, Pid} = client_node:start(ClientName, self()),
@@ -214,6 +226,43 @@ handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
 %%
+handle_cast({enable_to, {ProcPid, ProcPid, Module, Fun, Args = [{mil_timeout, MsgRef, _MsgContent}]}},
+            State = #state{})
+%% TODO: do not use MsgRef as ID later
+  when not is_tuple(ProcPid)->
+  Proc = pid_node(State, ProcPid),
+  Bool_crashed = check_if_crashed(State, Proc) or check_if_crashed(State, Proc),
+%%  Bool_whitelisted = check_if_whitelisted(From, To, Payload),
+  if
+    Bool_crashed ->
+%%      still log this event for matching later on
+      logger:info("enable_to_crsh", #{what => enable_to_crsh, id => State#state.id_counter,
+        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+      NextID = State#state.id_counter + 1,
+      {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
+%%    Bool_whitelisted -> do_cast_cmd(State, FromPid, ToPid, Payload),
+    {noreply, State};
+    true ->
+      QueueToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
+      UpdatedQueue = queue:in({MsgRef, Module, Fun, Args}, QueueToUpdate),
+      UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedQueue, State#state.enabled_timeouts),
+      logger:info("enable_to", #{what => enable_to, id => MsgRef,
+                from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+      erlang:display(["enable_to", "MsgRef", MsgRef, "From", Proc, "To", Proc, "Mod", Module, "Func", Fun, "Args", Args]),
+      {noreply, State#state{enabled_timeouts = UpdatedEnabledTimeouts}}
+  end;
+%%
+%%
+handle_cast({disable_to, {ProcPid, MsgRef}}, State = #state{}) ->
+  Proc = pid_node(State, ProcPid),
+  {Skipped, NewEnabledTimeouts} = find_enabled_to_and_get_updated_to_in_transit(State, Proc, MsgRef),
+  erlang:display(["disable_to", "Id", MsgRef, "From", Proc, "To", Proc]),
+  logger:info("disable_to", #{what => disable_to, id => undefined,
+    from => Proc, to => Proc, skipped => Skipped}),
+  {noreply, State#state{enabled_timeouts = NewEnabledTimeouts}};
+%%  {noreply, State};
+%%
+%%
 handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{})
   when not is_tuple(ToPid)->
 %%  erlang:display(["FromPid", FromPid, "ToPid", ToPid]),
@@ -246,6 +295,7 @@ handle_cast({bang, {FromPid, ToPid, Payload}}, State = #state{})
   end;
 %%
 handle_cast({noop, {}}, State = #state{}) ->
+  erlang:display("reach noop"),
   {noreply, State};
 %%
 handle_cast({send, {Id, From, To}}, State = #state{}) ->
@@ -333,8 +383,10 @@ node_pid(State, Node) ->
   Pid.
 
 pid_node(State, Pid) ->
-  {ok, Node} = orddict:find(Pid, State#state.registered_pid_nodes),
-  Node.
+  case orddict:find(Pid, State#state.registered_pid_nodes) of
+    {ok, Node} -> Node;
+    _ -> erlang:error(pid_not_registered)
+  end.
 
 client_pid(State, Node) ->
   {ok, Pid} = orddict:find(Node, State#state.client_nodes),
@@ -407,5 +459,24 @@ find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
       {Mod, Func, Args, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
 %%    skipped does only contain the IDs TODO, change this
     false -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
+%%  TODO: assumes that ID is in there
+  end.
+
+find_enabled_to_and_get_updated_to_in_transit(State, Proc, MsgRef) ->
+  QueueToSearch = orddict:fetch(Proc, State#state.enabled_timeouts),
+  {_, Skipped, UpdatedQueue} = find_to_in_queue(QueueToSearch, MsgRef), % we let MsgRef act as ID for timeouts (for now)
+  NewEnabledTimeouts = orddict:store(Proc, UpdatedQueue, State#state.enabled_timeouts),
+  {Skipped, NewEnabledTimeouts}.
+
+find_to_in_queue(QueueToSearch, Id) ->
+  find_to_in_queue([], QueueToSearch, Id).
+
+find_to_in_queue(SkippedList, TailQueueToSearch, Ref) ->
+  {{value, {CurrentRef, CurrentMod, CurrentFun, CurrentArgs}}, NewTailQueueToSearch} = queue:out(TailQueueToSearch),
+  case CurrentRef == Ref  of
+    true -> ReversedSkipped = lists:reverse(SkippedList),
+      {CurrentRef, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
+%%    skipped does only contain the IDs
+    false -> find_id_in_queue([CurrentRef | SkippedList], NewTailQueueToSearch, Ref)
 %%  TODO: assumes that ID is in there
   end.

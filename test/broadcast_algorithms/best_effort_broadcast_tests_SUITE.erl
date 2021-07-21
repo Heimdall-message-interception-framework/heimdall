@@ -82,9 +82,9 @@ no_crash_test(_Config) ->
     receive {Chat1, Received1} -> ok end,
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
-    assert_equal(['Hello everyone!'], Received1),
-    assert_equal(['Hello everyone!'], Received2),
-    assert_equal(['Hello everyone!'], Received3).
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
 no_crash_test_simple(_Config) ->
     % Create dummy link layer for testing:
@@ -114,9 +114,9 @@ no_crash_test_simple(_Config) ->
     receive {Chat1, Received1} -> ok end,
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
-    assert_equal(['Hello everyone!'], Received1),
-    assert_equal(['Hello everyone!'], Received2),
-    assert_equal(['Hello everyone!'], Received3).
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
 with_crash_test() ->
     % Create dummy link layer for testing:
@@ -142,7 +142,7 @@ with_crash_test() ->
     % We can only expect, that Chat2 has received the message:
     Chat2 ! {get_received, self()},
     receive {Chat2, Received2} -> ok end,
-    assert_equal(['Hello everyone!'], Received2).
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2).
 
 with_crash_test_simple(_Config) ->
     % Create dummy link layer for testing:
@@ -166,14 +166,5 @@ with_crash_test_simple(_Config) ->
     Chat3 ! {get_received, self()},
     receive {Chat1, Received1} -> ok end,
     receive {Chat3, Received3} -> ok end,
-    assert_equal(['Hello everyone!'], Received1),
-    assert_equal(['Hello everyone!'], Received3).
-
-
-assert_equal(First, Second) ->
-    case First == Second of
-        true -> ok;
-        false -> ct:fail("not the same")
-    end.
-
-
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
+    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).

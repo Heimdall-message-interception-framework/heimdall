@@ -6,7 +6,7 @@
 %%% @end
 %%% Created : 21. Jul 2021 09:32
 %%%-------------------------------------------------------------------
--module(statem_w_timeouts).
+-module(statem_w_timeouts_non_mi).
 -author("fms").
 
 %% TODO: first with normal gen_statem

@@ -183,7 +183,7 @@ handle_cast({cast_msg, From, To, Message}, State = #state{}) ->
 %%
 handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
   when not is_tuple(ToPid)->
-%%  erlang:display(["FromPid", FromPid, "ToPid", ToPid]),
+  erlang:display(["FromPid", FromPid, "ToPid", ToPid]),
   From = pid_node(State, FromPid),
   To = case is_pid(ToPid) of
          true -> pid_node(State, ToPid);

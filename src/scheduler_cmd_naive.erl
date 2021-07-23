@@ -8,7 +8,7 @@
 
 -behaviour(gen_server).
 
--export([start/0, start_scheduler/1]).
+-export([start/0, start_scheduler/1, register_msg_int_layer/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -25,6 +25,10 @@ start_scheduler(Scheduler) ->
 
 send_next_scheduling_instr(Scheduler) ->
   gen_server:cast(Scheduler, {send_next_sched}).
+
+register_msg_int_layer(Scheduler, MIL) ->
+  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}).
+
 
 %%%===================================================================
 %%% Spawning and gen_server implementation

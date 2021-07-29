@@ -2,7 +2,7 @@
 
 
 %% API
--export([send/3, register/2, all_nodes/1, other_nodes/1, this_node/1]).
+-export([send/3, register/2, register/3, all_nodes/1, other_nodes/1, this_node/1]).
 
 %% sends Data to other Node
 send(LL, Data, Node) ->
@@ -11,6 +11,9 @@ send(LL, Data, Node) ->
 %% Registers a receiver: all future messages will be delivered to the registered process
 register(LL, Receiver) ->
     gen_server:call(LL, {register, Receiver}).
+
+register(LL, Name, Receiver) ->
+    gen_server:call(LL, {register, Name, Receiver}).
 
 %% get all nodes (including own node)
 all_nodes(LL) ->

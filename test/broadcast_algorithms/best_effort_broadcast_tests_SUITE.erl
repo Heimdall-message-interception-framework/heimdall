@@ -2,13 +2,40 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--export([all/0, no_crash_test/1, no_crash_test_simple/1, with_crash_test_simple/1]).
+-export([all/0, no_crash_test/1, no_crash_test_simple/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
 all() -> [
     no_crash_test,
     no_crash_test_simple,
     with_crash_test_simple
 ].
+
+init_per_suite(Config) ->
+  logger:set_primary_config(level, info),
+  Config.
+
+end_per_suite(_Config) ->
+  _Config.
+
+init_per_testcase(TestCase, Config) ->
+  {_, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
+  logger:add_handler(readable_handler, logger_std_h, ConfigReadable),
+  {_, ConfigMachine} = logging_configs:get_config_for_machine(TestCase),
+  logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
+
+  % create message interception layer
+  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, MIL} = message_interception_layer:start(Scheduler),
+  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
+  gen_server:cast(MIL, {start}),
+
+  Config.
+
+end_per_testcase(_, Config) ->
+  logger:remove_handler(readable_handler),
+  logger:remove_handler(machine_handler),
+  Config.
 
 % a simple chat server for testing the broadcast:
 chat_loop(MIL, LL, Name, Received) ->
@@ -29,11 +56,11 @@ chat_loop(MIL, LL, Name, Received) ->
 
 % a simple chat server for testing the broadcast:
 chat_loop_simplified(LL, Name, Received) ->
-    {ok, B} = best_effort_broadcast_paper:start_link(LL, self()),
-    link_layer:register(LL, self()), % register on the link layer
+    % initialize broadcast process
+    {ok, B} = best_effort_broadcast_paper:start_link(LL, Name, self()),
     receive
         {post, From, Msg} ->
-            best_effort_broadcast_paper:broadcast(B, Msg),
+            best_effort_broadcast_paper:broadcast(B, {deliver,Msg}),
             From ! {self(), ok},
             chat_loop_simplified(LL, Name, Received);
         {deliver, Msg} ->
@@ -42,17 +69,16 @@ chat_loop_simplified(LL, Name, Received) ->
             From ! {self(), Received},
             chat_loop_simplified(LL, Name, Received);
         {crash, _From} ->
-            erlang:error(crashed)
+            erlang:error(crashed);
+        Message ->
+            io:format("[chat_loop] received unknown message: ~p~n", [Message]),
+            chat_loop_simplified(LL, Name, Received)
     end.
 
 no_crash_test(_Config) ->
-    {ok, Scheduler} = scheduler_naive:start(),
     % Create dummy link layer for testing:
     TestNodes = [nodeA, nodeB, nodeC],
-    {ok, MIL} = message_interception_layer:start(Scheduler),
-    gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-    gen_server:cast(MIL, {start}),
-
+    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     NamesPids = lists:map(fun(Name) ->
         {ok, Pid} = link_layer_dummy_node:start(MIL, Name),
         {Name, Pid}
@@ -87,11 +113,8 @@ no_crash_test(_Config) ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
 no_crash_test_simple(_Config) ->
-    % Create dummy link layer for testing:
-    % {ok, MIL} = message_interception_layer:start(Scheduler),
+    % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
-    % gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-    % gen_server:cast(MIL, {start}),
 
     % Create 3 chat servers:
     Chat1 = spawn_link(fun() -> chat_loop_simplified(LL, bc1, []) end),
@@ -102,7 +125,6 @@ no_crash_test_simple(_Config) ->
     Chat1 ! {post, self(), 'Hello everyone!'},
     receive {Chat1, ok} -> ok end,
 
-    io:format("I reached line 43"),
     % finish exchanging messages
 %%    link_layer_dummy:finish(LLD),
     timer:sleep(1000),
@@ -145,14 +167,16 @@ with_crash_test() ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2).
 
 with_crash_test_simple(_Config) ->
-    % Create dummy link layer for testing:
+    % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
+
     % Create 3 chat servers:
     Chat1 = spawn_link(fun() -> chat_loop_simplified(LL, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop_simplified(LL, bc2, []) end),
     Chat3 = spawn_link(fun() -> chat_loop_simplified(LL, bc3, []) end),
 
-    % crash chatserver 2
+    % crash chatserver 2 after 1 second
+    timer:sleep(1000),
     process_flag(trap_exit, true),
     exit(Chat2, crashed),
     % Chat2 ! {crash, self()},
@@ -161,6 +185,9 @@ with_crash_test_simple(_Config) ->
     % post a message to chatserver 1
     Chat1 ! {post, self(), 'Hello everyone!'},
     receive {Chat1, ok} -> ok end,
+
+    % wait for messages to be delivered
+    timer:sleep(1000),
 
     Chat1 ! {get_received, self()},
     Chat3 ! {get_received, self()},

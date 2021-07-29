@@ -55,11 +55,7 @@ handle_call({register, Name, R}, _From, State) ->
         _ -> 
             message_interception_layer:register_with_name(MIL, NewName, R, ll_client_node)
     end,
-    {reply, ok, State#state{nodes=[R|State#state.nodes]}};
 % returns all nodes currently on the link layer
-handle_call(all_nodes, _From, State) ->
-    erlang:display("all_nodes in LLsimpl"),
-    {reply, {ok, State#state.nodes}, State}.
 
 %%  asynchronous
 handle_cast(Msg, State) ->

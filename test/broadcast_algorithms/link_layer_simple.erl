@@ -8,8 +8,7 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2]).
 
 -record(state, {
-    nodes = [] :: [pid()],
-    network = undefined :: pid()
+    nodes = [] :: [pid()]
 }).
 
 %%% API-Functions
@@ -18,28 +17,20 @@ start() ->
     gen_server:start_link(?MODULE, [], []).
 
 init([]) ->
-    %%% MIL
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    case MIL of
-        undefined -> erlang:error("MIL not found in env!");
-        _ -> 
-            message_interception_layer:register_with_name(MIL, ll, self(), link_layer_simple)
-    end,
-    %%% LIM
     {ok, #state{}}.
 
 %%% Internal Functions
 %%  synchronous
 
 % send a message to another node via the link layer
-% this message will be delivered via the MIL
-handle_call({send, Data, Node}, _From, State) ->
+% this message will be delivered via the MIL after a configurable delay
+handle_call({send, Data, From, To}, _From, State) ->
     %%% MIL
     MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
-            message_interception_layer:msg_command(MIL, self(), Node, erlang, send, [Node, Data])
+            message_interception_layer:msg_command(MIL, From, To, erlang, send, [To, Data])
     end,
     % Node ! Data,
     %%% LIM
@@ -48,12 +39,15 @@ handle_call({send, Data, Node}, _From, State) ->
 % registers client nodes on the link layer, they can afterwards be contacted by other nodes
 handle_call({register, Name, R}, _From, State) ->
     NewName = list_to_atom(atom_to_list(Name) ++ pid_to_list(R)),
+    %%% MIL
     MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
             message_interception_layer:register_with_name(MIL, NewName, R, ll_client_node)
     end,
+    %%% LIM
+    {reply, ok, State#state{nodes=[R|State#state.nodes]}};
 % returns all nodes currently on the link layer
 
 %%  asynchronous

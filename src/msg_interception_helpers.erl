@@ -14,7 +14,7 @@
 
 - spec get_readable_time() -> [char()].
 get_readable_time() ->
-  {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:now_to_datetime(erlang:timestamp()),
+  {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:now_to_local_time(erlang:timestamp()),
   io_lib:format("~.4.0w-~.2.0w-~.2.0w-~.2.0w:~.2.0w:~.2.0w", [Year, Month, Day, Hour, Min, Sec]).
 
 

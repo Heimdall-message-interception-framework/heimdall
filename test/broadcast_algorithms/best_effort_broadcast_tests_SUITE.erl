@@ -1,6 +1,6 @@
 -module(best_effort_broadcast_tests_SUITE).
 
--include_lib("common_test/include/ct.hrl").
+% -include_lib("common_test/include/ct.hrl").
 
 -export([all/0, no_crash_test_simple/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
@@ -43,10 +43,10 @@ chat_loop_simplified(LL, Name, Received) ->
     {ok, B} = best_effort_broadcast_paper:start_link(LL, Name, self()),
     receive
         {post, From, Msg} ->
-            best_effort_broadcast_paper:broadcast(B, {deliver,Msg}),
+            best_effort_broadcast_paper:broadcast(B, {chat_msg,Msg}),
             From ! {self(), ok},
             chat_loop_simplified(LL, Name, Received);
-        {deliver, Msg} ->
+        {chat_msg, Msg} ->
             chat_loop_simplified(LL, Name, [Msg|Received]);
         {get_received, From} ->
             From ! {self(), Received},

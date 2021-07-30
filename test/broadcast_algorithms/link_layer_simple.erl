@@ -39,8 +39,7 @@ handle_call({send, Data, Node}, _From, State) ->
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
-%            message_interception_layer:msg_command(MIL, self(), Node, erlang, send, Data)
-             Node ! Data
+            message_interception_layer:msg_command(MIL, self(), Node, erlang, send, [Node, Data])
     end,
     % Node ! Data,
     %%% LIM

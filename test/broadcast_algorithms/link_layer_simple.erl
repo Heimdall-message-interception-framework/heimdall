@@ -23,7 +23,7 @@ init([]) ->
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
-            gen_server:cast(MIL, {register, {ll, self(), link_layer_simple}})
+            message_interception_layer:register_with_name(MIL, ll, self(), link_layer_simple)
     end,
     %%% LIM
     {ok, #state{}}.
@@ -39,9 +39,8 @@ handle_call({send, Data, Node}, _From, State) ->
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
-            gen_server:cast(MIL, {bang, {self(), Node, Data}})
-        % message_interception_layer:msg_command(MIL, self(), Node, erlang, send,
-                                                    % Data)
+%            message_interception_layer:msg_command(MIL, self(), Node, erlang, send, Data)
+             Node ! Data
     end,
     % Node ! Data,
     %%% LIM
@@ -54,11 +53,12 @@ handle_call({register, Name, R}, _From, State) ->
     case MIL of
         undefined -> erlang:error("MIL not found in env!");
         _ -> 
-            gen_server:cast(MIL, {register, {NewName, R, ll_client_node}})
+            message_interception_layer:register_with_name(MIL, NewName, R, ll_client_node)
     end,
     {reply, ok, State#state{nodes=[R|State#state.nodes]}};
 % returns all nodes currently on the link layer
 handle_call(all_nodes, _From, State) ->
+    erlang:display("all_nodes in LLsimpl"),
     {reply, {ok, State#state.nodes}, State}.
 
 %%  asynchronous

@@ -5,9 +5,9 @@
 -export([all/0, no_crash_test/1, no_crash_test_simple/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
 all() -> [
-    no_crash_test,
-    no_crash_test_simple,
-    with_crash_test_simple
+%    no_crash_test,
+    no_crash_test_simple
+%    with_crash_test_simple
 ].
 
 init_per_suite(Config) ->
@@ -24,7 +24,7 @@ init_per_testcase(TestCase, Config) ->
   logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
 
   % create message interception layer
-  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, Scheduler} = scheduler_cmd_naive:start(),
   {ok, MIL} = message_interception_layer:start(Scheduler),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
   gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
@@ -108,6 +108,8 @@ no_crash_test(_Config) ->
     receive {Chat1, Received1} -> ok end,
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
+    erlang:display("Received1"),
+    erlang:display(Received1),
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).

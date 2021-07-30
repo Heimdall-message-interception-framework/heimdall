@@ -158,7 +158,8 @@ send_N_messages_with_interval(From, To, {N, Interval}) ->
 assert_equal(First, Second) ->
   case First == Second of
     true -> ok;
-    false -> ct:fail("not the same")
+    false -> ct:fail("not the same: ~p ~p", [First,Second])
+
   end.
 
 assert_equal_schedules(File1, File2) ->

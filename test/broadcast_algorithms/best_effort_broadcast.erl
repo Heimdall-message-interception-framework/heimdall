@@ -28,8 +28,10 @@ init([LL, LN, R]) ->
 
 handle_call({broadcast, Msg}, _From, State) ->
 	LL = State#state.link_layer,
-	AllNodes = gen_server:call(State#state.link_layer, {all_bc_pids}),
-	[gen_server:cast(LL, {bang, {self(), Node, Msg}}) || Node <- AllNodes],
+%	AllNodes = gen_server:call(State#state.link_layer, {all_bc_pids}),
+	AllNodes = gen_server:call(State#state.link_layer, {all_nodes}),
+%	[gen_server:cast(LL, {bang, {self(), Node, Msg}}) || Node <- AllNodes],
+	[gen_server:cast(LL, {send, Msg, Node}) || Node <- AllNodes],
 	{reply, ok, State}.
 
 handle_info({best_effort_broadcast_msg, Msg}, State) ->

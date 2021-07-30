@@ -41,6 +41,10 @@ handle_call({broadcast, Msg}, _From, State) ->
 	[link_layer:send(LL, Msg, Node) || Node <- AllNodes, Node =/= self()],
 	{reply, ok, State}.
 
+handle_info({deliver, Msg}, State) ->
+	State#state.deliver_to ! Msg,
+	{noreply, State};
+
 handle_info(Msg, State) ->
     io:format("[best_effort_bc_paper] received unknown message: ~p~n", [Msg]),
 	{noreply, State}.

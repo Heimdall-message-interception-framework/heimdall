@@ -2,7 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 
--export([all/0, no_crash_test/1, no_crash_test_simple/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
+-export([all/0, no_crash_test_simple/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
 all() -> [
 %    no_crash_test,

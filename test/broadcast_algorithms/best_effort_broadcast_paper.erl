@@ -33,15 +33,15 @@ init([LL, Name, R]) ->
 
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
-	State#state.deliver_to ! Msg,
+	State#state.deliver_to ! {deliver, Msg},
 	% broadcast to everyone
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
-	[link_layer:send(LL, {deliver, Msg}, Node) || Node <- AllNodes, Node =/= self()],
+	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
 	{reply, ok, State}.
 
 handle_info({deliver, Msg}, State) ->
-	State#state.deliver_to ! Msg,
+	State#state.deliver_to ! {deliver, Msg},
 	{noreply, State};
 handle_info(Msg, State) ->
     io:format("[best_effort_bc_paper] received unknown message: ~p~n", [Msg]),

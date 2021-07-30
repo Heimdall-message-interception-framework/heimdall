@@ -43,10 +43,10 @@ chat_loop_simplified(LL, Name, Received) ->
     {ok, B} = best_effort_broadcast_paper:start_link(LL, Name, self()),
     receive
         {post, From, Msg} ->
-            best_effort_broadcast_paper:broadcast(B, {chat_msg,Msg}),
+            best_effort_broadcast_paper:broadcast(B, Msg),
             From ! {self(), ok},
             chat_loop_simplified(LL, Name, Received);
-        {chat_msg, Msg} ->
+        {deliver, Msg} ->
             chat_loop_simplified(LL, Name, [Msg|Received]);
         {get_received, From} ->
             From ! {self(), Received},

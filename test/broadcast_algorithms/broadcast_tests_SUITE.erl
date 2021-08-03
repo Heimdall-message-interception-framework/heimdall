@@ -1,4 +1,4 @@
--module(best_effort_broadcast_tests_SUITE).
+-module(broadcast_tests_SUITE).
 
 % -include_lib("common_test/include/ct.hrl").
 

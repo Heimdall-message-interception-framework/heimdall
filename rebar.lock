@@ -1,1 +1,8 @@
-[].
+{"1.2.0",
+[{<<"vectorclock">>,{pkg,<<"vectorclock">>,<<"0.2.0">>},0}]}.
+[
+{pkg_hash,[
+ {<<"vectorclock">>, <<"6C4A9D44895F51BB99910DBE31FC691BF05FA6B2BF84986F6E3BDE4BD18F6CBA">>}]},
+{pkg_hash_ext,[
+ {<<"vectorclock">>, <<"1CBB5B261B73D2D2DE537BE01A673754769E220121154735F729DEBD1139F60F">>}]}
+].

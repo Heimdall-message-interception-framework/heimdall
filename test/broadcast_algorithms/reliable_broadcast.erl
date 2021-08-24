@@ -58,7 +58,7 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			State#state.deliver_to ! {deliver, Msg},
 			NewDelivered = sets:add_element({Sender, Mid}, State#state.local_delivered),
 			% beb-broadcast again
-			best_effort_broadcast_paper:broadcast(State#state.beb, {deliver,{Sender,Mid,Msg}}),
+			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			{noreply, State#state{local_delivered = NewDelivered}}
 	end;
 handle_info(Msg, State) ->

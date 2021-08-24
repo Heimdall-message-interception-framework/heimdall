@@ -1,14 +1,37 @@
 -module(broadcast_tests_SUITE).
 
-% -include_lib("common_test/include/ct.hrl").
+-include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
--export([all/0, no_crash_test_simple/1, no_crash_test_rb/1, with_crash_test_simple/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
+-export([all/0, groups/0, no_crash_test/1, with_crash_test/1, causal_ordering_test/1, init_per_group/2, end_per_group/2, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
 all() -> [
-%    no_crash_test,
-    no_crash_test_simple
-%    with_crash_test_simple
+    {group,rco_tests},
+    {group,rb_tests},
+    {group,be_tests}
 ].
+
+groups() -> [
+    {rco_tests,
+        [no_crash_test, with_crash_test, causal_ordering_test]
+    },
+    {rb_tests,
+        [no_crash_test, with_crash_test, causal_ordering_test]
+    },
+    {be_tests,
+        [no_crash_test, with_crash_test, causal_ordering_test]
+    }
+].
+
+init_per_group(rco_tests, Config) ->
+    [{broadcast, causal_broadcast} | Config];
+init_per_group(rb_tests, Config) ->
+    [{broadcast, reliable_broadcast} | Config];
+init_per_group(be_tests, Config) ->
+    [{broadcast, best_effort_broadcast_paper} | Config].
+
+end_per_group(_GroupName, _Config) ->
+    _Config.
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
@@ -50,6 +73,7 @@ chat_loop_simplified(BCType, LL, BC, Name, Received) ->
             From ! {self(), ok},
             chat_loop_simplified(BCType, LL, UseBC, Name, Received);
         {deliver, Msg} ->
+            io:format("[chat_loop ~p] received message: ~p~n. Received messages: ~p", [Name,Msg, [Msg|Received]]),
             chat_loop_simplified(BCType, LL, UseBC, Name, [Msg|Received]);
         {get_received, From} ->
             From ! {self(), Received},
@@ -61,47 +85,12 @@ chat_loop_simplified(BCType, LL, BC, Name, Received) ->
             chat_loop_simplified(BCType, LL, UseBC, Name, Received)
     end.
 
-no_crash_test(_Config) ->
-    % Create dummy link layer for testing:
-    TestNodes = [nodeA, nodeB, nodeC],
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    NamesPids = lists:map(fun(Name) ->
-        {ok, Pid} = link_layer_dummy_node:start(MIL, Name),
-        {Name, Pid}
-    [{nodeA, LL1}, {nodeB, LL2}, {nodeC, LL3}] = NamesPids,
-
-    lists:map(fun({Name, Pid}) -> gen_server:cast(MIL, {register, {Name, Pid, link_layer_dummy_node}}) end, NamesPids),
-    lists:map(fun({Name, _}) -> gen_server:call(MIL, {reg_bc_node, {Name}}) end, NamesPids),
-    Chat2 = spawn_link(fun() -> chat_loop(MIL, LL2, bc2, []) end),
-    Chat3 = spawn_link(fun() -> chat_loop(MIL, LL3, bc3, []) end),
-
-    % post a message to chatserver 1
-    Chat1 ! {post, self(), 'Hello everyone!'},
-    receive {Chat1, ok} -> ok end,
-
-    % finish exchanging messages
-%%    link_layer_dummy:finish(LLD),
-    timer:sleep(2500),
-
-    % check that all chat-servers got the message:
-    Chat1 ! {get_received, self()},
-    Chat2 ! {get_received, self()},
-    Chat3 ! {get_received, self()},
-    receive {Chat1, Received1} -> ok end,
-    receive {Chat2, Received2} -> ok end,
-    receive {Chat3, Received3} -> ok end,
-    erlang:display("Received1"),
-    erlang:display(Received1),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
-
-no_crash_test_simple(_Config) ->
+no_crash_test(Config) ->
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
 
     % Create 3 chat servers using best effort broadcast:
-    B = best_effort_broadcast_paper,
+    B = ?config(broadcast, Config),
     Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
     Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
@@ -111,7 +100,7 @@ no_crash_test_simple(_Config) ->
     receive {Chat1, ok} -> ok end,
 
     % finish exchanging messages
-    timer:sleep(100),
+    timer:sleep(200),
 
     % check that all chat-servers got the message:
     Chat1 ! {get_received, self()},
@@ -126,12 +115,12 @@ no_crash_test_simple(_Config) ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
-with_crash_test_simple(_Config) ->
+with_crash_test(Config) ->
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
 
     % Create 3 chat servers using best effort broadcast:
-    B = best_effort_broadcast_paper,
+    B = ?config(broadcast, Config),
     Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
     Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
@@ -157,22 +146,26 @@ with_crash_test_simple(_Config) ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
-no_crash_test_rb(_Config) ->
+causal_ordering_test(Config) ->
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
 
-    % Create 3 chat servers using reliable broadcast:
-    B = reliable_broadcast,
+    % Create 3 chat servers using broadcast set in config:
+    B = ?config(broadcast, Config),
     Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
     Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
     Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
 
     % post a message to chatserver 1
     Chat1 ! {post, self(), 'Hello everyone!'},
+    Chat2 ! {post, self(), 'Hello from 2!'},
+    Chat1 ! {post, self(), 'My name is Marvin!'},
     receive {Chat1, ok} -> ok end,
+    receive {Chat1, ok} -> ok end,
+    receive {Chat2, ok} -> ok end,
 
     % finish exchanging messages
-    timer:sleep(500),
+    timer:sleep(1000),
 
     % check that all chat-servers got the message:
     Chat1 ! {get_received, self()},
@@ -181,8 +174,16 @@ no_crash_test_rb(_Config) ->
     receive {Chat1, Received1} -> ok end,
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
-    basic_tests_SUITE:assert_equal(Received1, Received2),
-    basic_tests_SUITE:assert_equal(Received2, Received3),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
-    basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
+    ValidOrderings = [
+        ['Hello from 2!', 'My name is Marvin!', 'Hello everyone!'],
+        ['My name is Marvin!', 'Hello from 2!', 'Hello everyone!'],
+        ['My name is Marvin!', 'Hello everyone!', 'Hello from 2!']
+    ],
+    ?assert(lists:member(Received1, ValidOrderings)),
+    ?assert(lists:member(Received2, ValidOrderings)),
+    ?assert(lists:member(Received3, ValidOrderings)).
+    % basic_tests_SUITE:assert_equal(Received1, Received2).
+    % basic_tests_SUITE:assert_equal(Received2, Received3).
+    % basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),
+    % basic_tests_SUITE:assert_equal(['Hello everyone!'], Received2),
+    % basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).

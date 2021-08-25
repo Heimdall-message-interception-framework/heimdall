@@ -4,24 +4,28 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(scheduler_cmd_naive).
+-module(scheduler_naive).
 
 -behaviour(gen_server).
 
--export([start/0, start_scheduler/1, register_msg_int_layer/2]).
+-export([start/0, register_msg_int_layer/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 50).
+-define(MIL, State#state.message_interception_layer_id).
 
 -record(state, {
   message_interception_layer_id :: pid() | undefined,
   commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}]
 }).
 
-start_scheduler(Scheduler) ->
-  gen_server:cast(Scheduler, {start}).
+%%%===================================================================
+%%% For External Use
+%%%===================================================================
+
+%% start_scheduler??
 
 send_next_scheduling_instr(Scheduler) ->
   gen_server:cast(Scheduler, {send_next_sched}).
@@ -48,9 +52,6 @@ handle_cast({start}, State) ->
   {noreply, State};
 %%
 handle_cast({new_events, ListNewCommands}, State = #state{}) ->
-  erlang:display(["new events", "length", length(ListNewCommands),
-                    "ListNewCommands", ListNewCommands,
-                    "CommandsSoFar", State#state.commands_in_transit]),
   UpdatedCommands = State#state.commands_in_transit ++ ListNewCommands,
   send_next_scheduling_instr(self()), % react to new events with new scheduled events
   {noreply, State#state{commands_in_transit = UpdatedCommands}};
@@ -59,27 +60,14 @@ handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}};
 %%
 handle_cast({send_next_sched}, State = #state{}) ->
-%%  Result = next_event_and_state(State),
-%%  erlang:display("exit sched_cmd_naive 64"),
   Result = next_event_and_state(State),
   case Result of
     {NextState, {ID, From, To, Mod, Func, Args}} ->
-      erlang:display("sched_cmd_naive:41, reach here"),
-      MIL = State#state.message_interception_layer_id,
-      message_interception_layer:exec_msg_command(MIL, ID, From, To, Mod, Func, Args),
+      message_interception_layer:exec_msg_command(?MIL, ID, From, To, Mod, Func, Args),
       {noreply, NextState};
     {NextState, {noop, {}}} ->
       {noreply, NextState}
   end.
-%%  case Result of
-%%    {NextState, {ID, From, To, Mod, Func, Args}} ->
-%%      erlang:display("sched_cmd_naive:61, reach here"),
-%%      MIL = State#state.message_interception_layer_id,
-%%      message_interception_layer:exec_msg_command(MIL, ID, From, To, Mod, Func, Args),
-%%      {noreply, NextState};
-%%    {NextState, {noop, {}}} ->
-%%      {noreply, NextState}
-%%  end.
 
 handle_info(trigger_send_next, _State) ->
   send_next_scheduling_instr(self()),
@@ -100,7 +88,6 @@ code_change(_OldVsn, State, _Extra) ->
 
 next_event_and_state(State) ->
 %% this one simply returns the first element
-  erlang:display("enter sched_cmd_naive 91"),
   case State#state.commands_in_transit of
     [] -> {State, {noop, {}}} ;
     [{ID,F,T,Mod,Func,Args} | Tail] ->

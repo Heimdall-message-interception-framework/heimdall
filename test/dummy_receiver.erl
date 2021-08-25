@@ -28,13 +28,11 @@ start(Name, MIL) ->
 init([_MIL]) ->
   {ok, #state{}}.
 
-%% only payloads for readability
 handle_call({get_received_payloads}, _From, State = #state{}) ->
-  ReceivedPayloads = [P || {_, _, P} <- State#state.received_messages],
-  {reply, ReceivedPayloads, State}.
+  {reply, State#state.received_messages, State}.
 
-handle_cast({message, From, To, Payload}, State = #state{}) ->
-  UpdatedMessages = State#state.received_messages ++ [{From, To, Payload}],
+handle_cast({message, Payload}, State = #state{}) ->
+  UpdatedMessages = State#state.received_messages ++ [Payload],
   {noreply, State#state{received_messages = UpdatedMessages}}.
 
 handle_info(_Info, State = #state{}) ->

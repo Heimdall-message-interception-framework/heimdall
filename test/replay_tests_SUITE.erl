@@ -17,11 +17,11 @@
   replay_naive_scheduler_same_payload_test/1, replay_naive_schedule_test/1, replay_client_req_test/1, replay_drop_req_test/1, replay_trans_crash_test/1]).
 
 all() -> [
-  replay_naive_schedule_test,
-  replay_naive_scheduler_same_payload_test,
-  replay_client_req_test,
-  replay_drop_req_test,
-  replay_trans_crash_test
+  replay_naive_schedule_test
+%%  replay_naive_scheduler_same_payload_test,
+%%  replay_client_req_test,
+%%  replay_drop_req_test,
+%%  replay_trans_crash_test
 ].
 
 init_per_suite(Config) ->
@@ -44,7 +44,7 @@ end_per_testcase(_, Config) ->
   Config.
 
 replay_naive_schedule_test(_Config) ->
-  FileNameOriginal = "../../../../logs/schedules/2021-03-03-10:33:25_mil_naive_scheduler_test__machine.sched",
+  FileNameOriginal = "../../../../logs/schedules/2021-08-24-12:39:24_mil_naive_scheduler_test__machine.sched",
   {ok, ReplayScheduler} = replay_schedule:start(FileNameOriginal),
   {ok, MIL} = message_interception_layer:start(ReplayScheduler),
   gen_server:cast(ReplayScheduler, {register_message_interception_layer, MIL}),

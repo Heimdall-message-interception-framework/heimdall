@@ -13,6 +13,7 @@
   code_change/3]).
 
 -define(SERVER, ?MODULE).
+-define(MIL, State#state.message_interception_layer_id).
 
 -record(state, {
   message_interception_layer_id :: pid()
@@ -54,8 +55,10 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 
 send_N_messages_with_interval(State, N, To, Interval) ->
   if
-    N > 0 -> gen_server:cast(State#state.message_interception_layer_id, {bang, {self(), To, N}}),
+    N > 0 ->
+      message_interception_layer:msg_command(?MIL, self(), To, gen_server, cast, [To, {message, N}]),
       timer:sleep(Interval),
       send_N_messages_with_interval(State, N-1, To, Interval);
-    N == 0 -> gen_server:cast(State#state.message_interception_layer_id, {bang, {self(), To, N}})
+    N == 0 ->
+      message_interception_layer:msg_command(?MIL, self(), To, gen_server, cast, [To, {message, N}])
   end.

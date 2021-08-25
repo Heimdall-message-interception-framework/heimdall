@@ -8,15 +8,23 @@
 %%%-------------------------------------------------------------------
 -author("fms").
 
+-type sched_event_type() :: reg_node | reg_clnt
+                          | cmd_rcv | cmd_rcv_crsh | exec_msg_cmd
+                          | enable_to | enable_to_crsh | disable_to
+                          | duplicat | snd_altr | drop_msg
+                          | trns_crs | rejoin | perm_crs.
+
+-export_type([sched_event_type/0]).
+
 -record(sched_event, {
-                  what :: atom(), %% we could be more precise here
+                  what :: sched_event_type(),
                   id = undefined :: number(),
                   name = undefined :: atom() | undefined,
                   class = undefined :: atom() | undefined,
                   from = undefined :: atom() | undefined,
                   to = undefined :: atom() | undefined,
-                  mesg = undefined :: any(),
-                  old_mesg = undefined :: any(),
+%%                  mesg = undefined :: any(),
+%%                  old_mesg = undefined :: any(),
                   skipped = undefined :: list(number()) | undefined,
                   mod = undefined :: atom() | undefined,
                   func = undefined :: atom() | undefined,

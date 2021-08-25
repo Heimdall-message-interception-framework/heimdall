@@ -46,9 +46,9 @@ end_per_suite(_Config) ->
 
 init_per_testcase(TestCase, Config) ->
 %%  start MIL and Scheduler
-  {ok, Scheduler} = scheduler_cmd_naive:start(),
+  {ok, Scheduler} = scheduler_naive:start(),
   {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_cmd_naive:register_msg_int_layer(Scheduler, MIL),
+  scheduler_naive:register_msg_int_layer(Scheduler, MIL),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 %%  start observer and state machine
   {ok, _Observer} = observer_timeouts:start(),
@@ -57,7 +57,7 @@ init_per_testcase(TestCase, Config) ->
      % we use the module as name here in case it is used in calls or casts
   message_interception_layer:register_with_name(MIL, client, self(), test_client),
 %%  start scheduler
-  scheduler_cmd_naive:start_scheduler(MIL),
+  scheduler_naive:start_scheduler(MIL),
 %%  set logs
   {FileReadable, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
   logger:add_handler(readable_handler, logger_std_h, ConfigReadable),

@@ -4,32 +4,36 @@
 %%% @doc
 %%% @end
 %%%-------------------------------------------------------------------
--module(scheduler_naive_transient_fault).
+-module(scheduler_naive_duplicate_msg).
 
 -behaviour(gen_server).
 
--export([start/0]).
+-export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 
+%% TODO: change to use commands
+
 -record(state, {
   message_interception_layer_id :: pid() | undefined,
-  messages_in_transit = [] :: [{ID::number(), From::pid(), To::pid(), Msg::any()}]
+  messages_in_transit = [] :: [{ID::number(), From::pid(), To::pid(), Msg::any()}],
+  to_duplicate :: any(),
+  duplicated = false :: boolean()
 }).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start(ToDuplicate) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [ToDuplicate], []).
 
-init([]) ->
-  {ok, #state{}}.
+init([ToDuplicate]) ->
+  {ok, #state{to_duplicate = ToDuplicate}}.
 
-handle_call(_Request, _From, State) ->
+handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
 handle_cast({new_events, ListNewMessages}, State = #state{}) ->
@@ -41,13 +45,13 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
 handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}}.
 
-handle_info(_Info, State) ->
+handle_info(_Info, State = #state{}) ->
   {noreply, State}.
 
-terminate(_Reason, _State) ->
+terminate(_Reason, _State = #state{}) ->
   ok.
 
-code_change(_OldVsn, State, _Extra) ->
+code_change(_OldVsn, State = #state{}, _Extra) ->
   {ok, State}.
 
 %%%===================================================================
@@ -56,19 +60,14 @@ code_change(_OldVsn, State, _Extra) ->
 
 
 next_event_and_state(State) ->
-%% this one simply returns the first element for 3 messages,
-%% afterwards it crashes the process (transiently)
+%% this one simply returns the first element
   case State#state.messages_in_transit of
     [] -> {State, {noop, {}}} ;
-    [{ID,F,T,M} | Tail] ->
-      case M of
-        7 ->
-          FilteredMessages = lists:filter(fun({_,_,To,_}) -> To /= T end, Tail),
-          {State#state{messages_in_transit = FilteredMessages}, {crash_trans, {T}}};
-        _ ->
-          {State#state{messages_in_transit = Tail}, {send, {ID,F,T}}}
+    [{ID,F,T, Payload} | Tail] ->
+      case {State#state.duplicated, Payload == State#state.to_duplicate} of
+        {false, true} -> {State#state{duplicated = true}, {duplicate, {ID, F, T}}};
+        _ -> {State#state{messages_in_transit = Tail}, {send_altered, {ID, F, T, Payload}}}
       end
   end.
-
 
 

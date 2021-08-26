@@ -21,7 +21,7 @@ start_link(LinkLayer, ProcessName, RespondTo) ->
 % broadcasts a message to all other nodes that we are connected to
 -spec broadcast(bc_types:broadcast(), bc_types:message()) -> any().
 broadcast(B, Msg) ->
-	erlang:display(["Broadcasting: ~p~n", Msg]),
+	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).
 
 init([LL, Name, R]) ->

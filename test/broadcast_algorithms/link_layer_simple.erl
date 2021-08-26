@@ -49,6 +49,8 @@ handle_call({register, Name, R}, _From, State) ->
     %%% LIM
     {reply, ok, State#state{nodes=[R|State#state.nodes]}};
 % returns all nodes currently on the link layer
+handle_call(all_nodes, _From, State) ->
+    {reply, {ok, State#state.nodes}, State}.
 
 %%  asynchronous
 handle_cast(Msg, State) ->

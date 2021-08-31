@@ -46,6 +46,9 @@ handle_call({broadcast, Msg}, _From, State) ->
 	best_effort_broadcast_paper:broadcast(State#state.beb, {State#state.self, Mid, Msg}),
 	% update state
 	NewDelivered = sets:add_element({State#state.self, Mid}, State#state.local_delivered),
+	%%% MIL
+    gen_event:sync_notify({global,om}, {update, "local_delivered", State#state.local_delivered, NewDelivered}),
+	%%% LIM
 	{reply, ok, State#state{local_delivered = NewDelivered}}.
 
 -spec handle_info({deliver, bc_types:message()}, _) -> {'noreply', _}.
@@ -59,6 +62,9 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			NewDelivered = sets:add_element({Sender, Mid}, State#state.local_delivered),
 			% beb-broadcast again
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
+			%%% MIL
+			gen_event:sync_notify({global,om}, {update, "local_delivered", State#state.local_delivered, NewDelivered}),
+			%%% LIM
 			{noreply, State#state{local_delivered = NewDelivered}}
 	end;
 handle_info(Msg, State) ->

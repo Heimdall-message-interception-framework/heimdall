@@ -24,8 +24,12 @@ groups() -> [
 ].
 
 init_per_group(rco_tests, Config) ->
+    % register reliable_broadcast observer
+    gen_event:add_handler({global, om}, rb_observer, []),
     [{broadcast, causal_broadcast} | Config];
 init_per_group(rb_tests, Config) ->
+    % register reliable_broadcast observer
+    gen_event:add_handler({global, om}, rb_observer, []),
     [{broadcast, reliable_broadcast} | Config];
 init_per_group(be_tests, Config) ->
     [{broadcast, best_effort_broadcast_paper} | Config].
@@ -35,6 +39,8 @@ end_per_group(_GroupName, _Config) ->
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
+  % create observer manager
+  {ok, _} = gen_event:start({global, om}),
   Config.
 
 end_per_suite(_Config) ->

@@ -10,9 +10,16 @@
 -author("fms").
 
 %% API
--export([get_readable_time/0, remove_firstmatch/2]).
+-export([get_readable_time/0, remove_firstmatch/2, get_message_interception_layer/0]).
 
-- spec get_readable_time() -> [char()].
+get_message_interception_layer() ->
+  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
+  case MIL of
+      undefined -> erlang:throw("no message interception layer registered");
+      _ -> MIL
+  end.
+
+  - spec get_readable_time() -> [char()].
 get_readable_time() ->
   {{Year, Month, Day}, {Hour, Min, Sec}} = calendar:now_to_local_time(erlang:timestamp()),
   io_lib:format("~.4.0w-~.2.0w-~.2.0w-~.2.0w:~.2.0w:~.2.0w", [Year, Month, Day, Hour, Min, Sec]).

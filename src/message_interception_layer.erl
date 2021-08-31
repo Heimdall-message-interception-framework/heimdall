@@ -12,7 +12,7 @@
 
 -export([start_msg_int_layer/1, register_with_name/4, register_client/2,
   duplicate_msg_command/4, alter_msg_command/5, transient_crash/2, rejoin/2,
-  permanent_crash/2, msg_command/6, exec_msg_command/7, enable_timeout/3, disable_timeout/3, drop_msg_command/4]).
+  permanent_crash/2, msg_command/6, exec_msg_command/7, enable_timeout/5, disable_timeout/3, drop_msg_command/4]).
 -export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -75,15 +75,23 @@ drop_msg_command(MIL, Id, From, To) ->
 
 %% timeouts
 
-enable_timeout(MIL, Proc, MsgRef) ->
-  enable_timeout(MIL, Proc, MsgRef, undefined).
+enable_timeout(MIL, Time, Dest, Msg) ->
+  enable_timeout(MIL, Time, Dest, Msg, undefined).
 
-enable_timeout(MIL, Proc, MsgRef, MsgContent) ->
+enable_timeout(MIL, Time, Dest, Msg, Options) ->
+%%  we assume that processes do only send timeouts to themselves and ignore Options
+%%  TODO: add Time in data structures later
 %%  TODO: where to store MsgContent in sched_event?
-  gen_server:cast(MIL, {enable_to, {Proc, Proc, erlang, send, [{mil_timeout, MsgRef, MsgContent}]}}).
+  TimerRef = make_ref(),
+  gen_server:cast(MIL, {enable_to, {Dest, Dest, erlang, send, [{mil_timeout, TimerRef, Msg}]}}),
+%%  return TimerRef as result
+  TimerRef.
 
-disable_timeout(MIL, Proc, MsgRef) ->
-  gen_server:cast(MIL, {disable_to, {Proc, MsgRef}}).
+%% TODO: update interface
+%% shall return true or false
+disable_timeout(MIL, Proc, TimerRef) ->
+  {ok, Result} = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
+  Result.
 
 %% client requests, removed for the time being
 %%client_req(MIL, ClientName, Coordinator, ClientCmd) ->
@@ -113,6 +121,14 @@ start(Scheduler) ->
 init([Scheduler]) ->
   {ok, #state{scheduler_id = Scheduler}}.
 
+handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
+  Proc = pid_to_node(State, ProcPid),
+  {Skipped, NewEnabledTimeouts} = find_enabled_to_and_get_updated_to_in_transit(State, Proc, TimerRef),
+%%  erlang:display(["disable_to", "Id", MsgRef, "From", Proc, "To", Proc]),
+  logger:info("disable_to", #{what => disable_to, id => undefined,
+    from => Proc, to => Proc, skipped => Skipped}),
+  {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
+%% TODO: add case where timeout is not available anymore and return false
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
@@ -185,13 +201,12 @@ handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
 %%
-handle_cast({enable_to, {ProcPid, ProcPid, Module, Fun, Args = [{mil_timeout, MsgRef, _MsgContent}]}},
+handle_cast({enable_to, {ProcPid, ProcPid, Module, Fun, Args = [{mil_timeout, TimerRef, _MsgContent}]}},
             State = #state{})
-%% TODO: do not use MsgRef as ID later
+%% TODO: handle timeouts in a way that schedulers can use them
   when not is_tuple(ProcPid)->
   Proc = pid_to_node(State, ProcPid),
   Bool_crashed = check_if_crashed(State, Proc) or check_if_crashed(State, Proc),
-%%  Bool_whitelisted = check_if_whitelisted(From, To, Payload),
   if
     Bool_crashed ->
 %%      still log this event for matching later on
@@ -199,26 +214,16 @@ handle_cast({enable_to, {ProcPid, ProcPid, Module, Fun, Args = [{mil_timeout, Ms
         from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
-%%    Bool_whitelisted -> do_cast_cmd(State, FromPid, ToPid, Payload),
     {noreply, State};
     true ->
       QueueToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
-      UpdatedQueue = queue:in({MsgRef, Module, Fun, Args}, QueueToUpdate),
+      UpdatedQueue = queue:in({TimerRef, Module, Fun, Args}, QueueToUpdate),
       UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedQueue, State#state.enabled_timeouts),
-      logger:info("enable_to", #{what => enable_to, id => MsgRef,
+      logger:info("enable_to", #{what => enable_to, id => TimerRef,
                 from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
 %%      erlang:display(["enable_to", "MsgRef", MsgRef, "From", Proc, "To", Proc, "Mod", Module, "Func", Fun, "Args", Args]),
       {noreply, State#state{enabled_timeouts = UpdatedEnabledTimeouts}}
   end;
-%%
-%%
-handle_cast({disable_to, {ProcPid, MsgRef}}, State = #state{}) ->
-  Proc = pid_to_node(State, ProcPid),
-  {Skipped, NewEnabledTimeouts} = find_enabled_to_and_get_updated_to_in_transit(State, Proc, MsgRef),
-%%  erlang:display(["disable_to", "Id", MsgRef, "From", Proc, "To", Proc]),
-  logger:info("disable_to", #{what => disable_to, id => undefined,
-    from => Proc, to => Proc, skipped => Skipped}),
-  {noreply, State#state{enabled_timeouts = NewEnabledTimeouts}};
 %%
 %% TODO: change to "wait for new events" or similiar
 handle_cast({noop, {}}, State = #state{}) ->

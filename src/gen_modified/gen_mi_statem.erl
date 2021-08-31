@@ -456,10 +456,7 @@ timeout_event_type(Type) ->
               TimeoutType :: timeout_event_type() =>
                              {TimerRef :: reference() | 0,
                               TimeoutMsg :: term()}},
-         hibernate = false :: boolean(),
-          % MIL
-%%          TODO: probably remove this and how it is added due to the environment variable way of handling things
-         msg_int_layer = undefined :: undefined | pid()
+         hibernate = false :: boolean()
         }).
 
 %%%==========================================================================
@@ -643,7 +640,7 @@ reply(From, Reply) ->
 %%    erlang:display(["REPLY req", "self", self(), "From", From, "Reply", Reply]),
   %%  MIL
 %%  decided not to do this layer deeper since there are three cases then
-    MIL = application:get_env(ra, msg_int_layer, undefined),
+    MIL = application:get_env(sched_msg_interception_layer, msg_int_layer, undefined),
     case MIL of
       undefined -> ok;
       _ -> {FromWoRef, _} = From,
@@ -733,7 +730,7 @@ call_clean(ServerRef, Request, Timeout, T) ->
 %%    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     Ref = make_ref(),
     Self = self(),
-    MIL = application:get_env(ra, msg_int_layer, undefined),
+    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     Pid = spawn(
             fun () ->
 %%              MIL
@@ -801,12 +798,12 @@ replies([]) ->
 %% Might actually not send the message in case of caught exception
 send(Proc, Msg) ->
   %%  MIL
-    MIL = application:get_env(ra, msg_int_layer, undefined),
+    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     case MIL of
       undefined -> ok;
       _ -> message_interception_layer:msg_command(MIL, self(), Proc, erlang, send, [Proc, Msg])
     end,
-%%  removed for MIL but TODO: error handling?
+%%  removed for MIL but
 %%    try erlang:send(Proc, Msg)
 %%    catch
 %%      error:_ -> ok
@@ -836,7 +833,7 @@ enter(
            modules = [Module],
            name = Name,
            hibernate_after = HibernateAfterTimeout},
-    S = #state{state_data = {State,Data}, msg_int_layer = MIL},
+    S = #state{state_data = {State,Data}},
     Debug_1 = ?sys_debug(Debug, Name, {enter,State}),
     loop_state_callback(
       P, Debug_1, S, Q, {State,Data},
@@ -1116,7 +1113,10 @@ loop_receive(
                 {'$gen_cast',Cast} ->
                     loop_receive_result(P, Debug, S, {cast,Cast});
                 %%
-		{timeout,TimerRef,TimeoutType} ->
+%%      MIL TIMEOUT
+		{mil_timeout,TimerRef,TimeoutType} ->
+                erlang:display("received timeout"),
+%%      LIM TIMEOUT
                     case S#state.timers of
                         #{TimeoutType := {TimerRef,TimeoutMsg}} = Timers
                           when TimeoutType =/= t0q->
@@ -1658,6 +1658,7 @@ loop_actions_list(
               CallEnter, StateCall, Actions, Action)
     end.
 
+%% MIL TIMEOUT A
 %% Process all other actions, i.e timeout actions,
 %% all others are unrecognized
 %%
@@ -1801,6 +1802,7 @@ loop_actions_list(
                 hibernate = Hibernate},
               Q)
     end.
+%% LIM TIMEOUT B
 
 %% Process a reply action
 %%
@@ -1997,6 +1999,7 @@ loop_state_change(
               NextEventsR, Hibernate, TimeoutsR)
     end.
 %%
+%% MIL TIMEOUT C
 loop_state_change(
   P, Debug, #state{timers = Timers} = S,
   Events, NextState_NewData,
@@ -2031,6 +2034,7 @@ loop_state_change(
               NextEventsR, Hibernate, TimeoutsR, [],
               Timers)
     end.
+%% LIM TIMEOUT D
 
 %% Continue state transition with processing of
 %% timeouts and inserted events
@@ -2169,8 +2173,11 @@ loop_timeouts_start(
               TimeoutType, Time, TimeoutMsg, TimeoutOpts, TimerRef);
         _ ->
             %% (Re)start the timer
+            MIL = msg_interception_helpers:get_message_interception_layer(),
             TimerRef =
-                erlang:start_timer(Time, self(), TimeoutType, TimeoutOpts),
+%%            MIL TIMEOUT TODO
+%%                erlang:start_timer(Time, self(), TimeoutType, TimeoutOpts),
+                  message_interception_layer:enable_timeout(MIL, Time, self(), TimeoutType, TimeoutOpts),
             loop_timeouts_register(
               P, Debug, S,
               Events, NextState_NewData,
@@ -2179,6 +2186,7 @@ loop_timeouts_start(
               TimeoutType, Time, TimeoutMsg, TimeoutOpts, TimerRef)
     end.
 
+%% MIL TIMEOUT I (see 2nd function definition)
 %% Loop helper to register a newly started timer
 %% and to cancel any running timer
 %%
@@ -2250,7 +2258,9 @@ loop_timeouts_register(
               NextEventsR, Hibernate, TimeoutsR, Postponed,
               Timers_1, Seen#{TimeoutType => true}, TimeoutEvents)
     end.
+%% LIM TIMEOUT J
 
+%% MIL TIMEOUT E
 %% Loop helper to cancel a timeout
 %%
 loop_timeouts_cancel(
@@ -2281,13 +2291,16 @@ loop_timeouts_cancel(
               NextEventsR, Hibernate, TimeoutsR, Postponed,
               Timers_1, Seen#{TimeoutType => true}, TimeoutEvents);
         #{} ->
+            erlang:display("Do not quite know when this happens so check if/when?"),
             loop_timeouts(
               P, Debug, S,
               Events, NextState_NewData,
               NextEventsR, Hibernate, TimeoutsR, Postponed,
               Timers, Seen#{TimeoutType => true}, TimeoutEvents)
     end.
+%% LIM TIMEOUT F
 
+%% MIL TIMEOUT G
 %% Loop helper to update the timeout message,
 %% or start a zero timeout if no timer is running
 %%
@@ -2317,6 +2330,7 @@ loop_timeouts_update(
               Timers_1, Seen#{TimeoutType => true},
               TimeoutEvents_1)
     end.
+%% LIM TIMEOUT H
 
 %% Place inserted events first in the event queue
 %%
@@ -2853,23 +2867,45 @@ listify(Item) ->
 
 -define(
    cancel_timer(TimerRef),
-   case erlang:cancel_timer(TimerRef) of
+%% MIL TIMEOUT case with one parameter only which is called after handling other parameters
+%%   case erlang:cancel_timer(TimerRef) of
+   MIL = msg_interception_helpers:get_message_interception_layer(),
+   case message_interception_layer:disable_timeout(MIL, self(), TimerRef) of
        false ->
            %% No timer found and we have not seen the timeout message
            receive
-               {timeout,(TimerRef),_} ->
+%%               {timeout,(TimerRef),_} ->
+               {mil_timeout,(TimerRef),_} ->
                    ok
            end;
        _ ->
            %% Timer was running
            ok
+%% LIM TIMEOUT
    end).
 %%
 %% Cancel erlang: timer and consume timeout message
 %%
 -compile({inline, [cancel_timer/1]}).
 cancel_timer(TimerRef) ->
-    ?cancel_timer(TimerRef).
+  ?cancel_timer(TimerRef).
+%%%%  moved from define-env
+%%%% MIL TIMEOUT case with one parameter only which is called after handling other parameters
+%%%%   case erlang:cancel_timer(TimerRef) of
+%%   MIL = msg_interception_helpers:get_message_interception_layer(),
+%%   case message_interception_layer:disable_timeout(MIL, self(), TimerRef) of
+%%       false ->
+%%           %% No timer found and we have not seen the timeout message
+%%           receive
+%%%%               {timeout,(TimerRef),_} ->
+%%               {mil_timeout,(TimerRef),_} ->
+%%                   ok
+%%           end;
+%%       _ ->
+%%           %% Timer was running
+%%           ok
+%%%% LIM TIMEOUT
+%%   end).
 
 
 -define(

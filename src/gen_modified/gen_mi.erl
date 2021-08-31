@@ -258,6 +258,7 @@ do_call(Process, Label, Request, Timeout) when is_atom(Process) =:= false ->
     %%  LIM
 %%  MIL receive
     MsgRef = make_ref(),
+%%  TODO: use Timeout parameter here
     message_interception_layer:enable_timeout(MIL, self(), MsgRef),
     ResultRcv = receive
                   {[alias | Mref], Reply} ->

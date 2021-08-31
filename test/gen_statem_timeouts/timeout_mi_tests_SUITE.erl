@@ -20,21 +20,21 @@
   test_general_to_cancel_to/1, test_general_to_set_inf/1, test_general_to_reset_time/1]).
 
 all() -> [
-  test_event_to,
-  test_event_to_keep_state,
-  test_event_to_switch_state,
-  test_state_to,
-  test_state_to_keep_state,
-  test_state_to_switch_state,
-  test_state_to_cancel_to,
-  test_state_to_set_inf,
-  test_state_to_reset_time,
-  test_general_to,
-  test_general_to_keep_state,
-  test_general_to_switch_state,
-  test_general_to_cancel_to,
-  test_general_to_set_inf,
-  test_general_to_reset_time
+  test_event_to
+%%  test_event_to_keep_state,
+%%  test_event_to_switch_state,
+%%  test_state_to,
+%%  test_state_to_keep_state,
+%%  test_state_to_switch_state,
+%%  test_state_to_cancel_to,
+%%  test_state_to_set_inf,
+%%  test_state_to_reset_time,
+%%  test_general_to,
+%%  test_general_to_keep_state,
+%%  test_general_to_switch_state,
+%%  test_general_to_cancel_to,
+%%  test_general_to_set_inf,
+%%  test_general_to_reset_time
 ].
 
 init_per_suite(Config) ->
@@ -56,8 +56,8 @@ init_per_testcase(TestCase, Config) ->
   message_interception_layer:register_with_name(MIL, statem_w_timeouts_mi, StatemPID, statem_w_timeouts_mi),
      % we use the module as name here in case it is used in calls or casts
   message_interception_layer:register_with_name(MIL, client, self(), test_client),
-%%  start scheduler
-  scheduler_naive:start_scheduler(MIL),
+%%  start the MIL
+  message_interception_layer:start_msg_int_layer(MIL),
 %%  set logs
   {FileReadable, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
   logger:add_handler(readable_handler, logger_std_h, ConfigReadable),
@@ -77,6 +77,7 @@ test_event_to(_Config) ->
   timer:sleep(1000),
   ListEvents = observer_timeouts:get_list_events(),
   ExpectedEvents = [initial__set_event_to, event_TO__event_timed_out],
+  erlang:display(ListEvents),
   assert_equal(ListEvents, ExpectedEvents).
 
 test_event_to_keep_state(_Config) ->

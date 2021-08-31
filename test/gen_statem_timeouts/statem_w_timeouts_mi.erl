@@ -9,7 +9,6 @@
 -module(statem_w_timeouts_mi).
 -author("fms").
 
-%% TODO: first with normal gen_mi_statem
 -behaviour(gen_mi_statem).
 
 %% API
@@ -98,7 +97,9 @@ initial(cast, {set_state_to, Time}, State = #statem_w_timeouts_state{}) ->
 initial(cast, {set_general_to, Time}, State = #statem_w_timeouts_state{}) ->
   NextStateName = general_TO,
   observer_timeouts:add_new_event(initial__set_general_to),
-  {next_state, NextStateName, State, {{timeout, general}, Time, general_timed_out}}.
+  {next_state, NextStateName, State, {{timeout, general}, Time, general_timed_out}};
+initial(EventType, EventContent, State) ->
+  handle_event(EventType, EventContent, State).
 
 event_TO(timeout, event_timed_out, State = #statem_w_timeouts_state{}) ->
   observer_timeouts:add_new_event(event_TO__event_timed_out),

@@ -1,4 +1,5 @@
 -module(rb_observer).
+% a simple observer which tracks changes to the local_delivered variable of reliable broadcasts. Every change is logged to stdout.
 -behaviour(gen_event).
 
 -export([init/1, handle_call/2, handle_event/2]).

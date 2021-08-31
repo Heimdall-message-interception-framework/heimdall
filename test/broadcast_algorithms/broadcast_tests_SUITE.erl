@@ -6,9 +6,9 @@
 -export([all/0, groups/0, no_crash_test/1, with_crash_test/1, causal_ordering_test/1, init_per_group/2, end_per_group/2, init_per_testcase/2, init_per_suite/1, end_per_suite/1,end_per_testcase/2]).
 
 all() -> [
-    {group,rco_tests},
+    {group,be_tests},
     {group,rb_tests},
-    {group,be_tests}
+    {group,rco_tests}
 ].
 
 groups() -> [

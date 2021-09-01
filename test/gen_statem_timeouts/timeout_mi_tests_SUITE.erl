@@ -20,21 +20,21 @@
   test_general_to_cancel_to/1, test_general_to_set_inf/1, test_general_to_reset_time/1]).
 
 all() -> [
-  test_event_to
-%%  test_event_to_keep_state,
-%%  test_event_to_switch_state,
-%%  test_state_to,
-%%  test_state_to_keep_state,
-%%  test_state_to_switch_state,
-%%  test_state_to_cancel_to,
-%%  test_state_to_set_inf,
-%%  test_state_to_reset_time,
-%%  test_general_to,
-%%  test_general_to_keep_state,
-%%  test_general_to_switch_state,
-%%  test_general_to_cancel_to,
-%%  test_general_to_set_inf,
-%%  test_general_to_reset_time
+  test_event_to,
+  test_event_to_keep_state,
+  test_event_to_switch_state,
+  test_state_to,
+  test_state_to_keep_state,
+  test_state_to_switch_state,
+  test_state_to_cancel_to,
+  test_state_to_set_inf,
+  test_state_to_reset_time,
+  test_general_to,
+  test_general_to_keep_state,
+  test_general_to_switch_state,
+  test_general_to_cancel_to,
+  test_general_to_set_inf,
+  test_general_to_reset_time
 ].
 
 init_per_suite(Config) ->
@@ -77,7 +77,6 @@ test_event_to(_Config) ->
   timer:sleep(1000),
   ListEvents = observer_timeouts:get_list_events(),
   ExpectedEvents = [initial__set_event_to, event_TO__event_timed_out],
-  erlang:display(ListEvents),
   assert_equal(ListEvents, ExpectedEvents).
 
 test_event_to_keep_state(_Config) ->

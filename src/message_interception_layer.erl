@@ -12,7 +12,8 @@
 
 -export([start_msg_int_layer/1, register_with_name/4, register_client/2,
   duplicate_msg_command/4, alter_msg_command/5, transient_crash/2, rejoin/2,
-  permanent_crash/2, msg_command/6, exec_msg_command/7, enable_timeout/5, disable_timeout/3, drop_msg_command/4]).
+  permanent_crash/2, msg_command/6, exec_msg_command/7, enable_timeout/5, disable_timeout/3,
+  drop_msg_command/4, enable_timeout/4, fire_timeout/3, poll_timeouts/1]).
 -export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
@@ -29,7 +30,8 @@
   commands_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
                               queue:queue({ID::any(), Module::atom(), Function::atom(), Args::list(any())})),
   new_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
-  enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(), queue:queue(any())),
+  enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(),
+                                                      orddict:orddict({TimerRef::reference(), {Time::any(), Module::pid(), Function::atom(), ListArgs::list(any())}})),
 %%  scheduler_id is only used to send the new_events, we could also request these with the scheduler
   scheduler_id :: pid(),
   id_counter = 0 :: any()
@@ -78,20 +80,24 @@ drop_msg_command(MIL, Id, From, To) ->
 enable_timeout(MIL, Time, Dest, Msg) ->
   enable_timeout(MIL, Time, Dest, Msg, undefined).
 
-enable_timeout(MIL, Time, Dest, Msg, Options) ->
+enable_timeout(MIL, Time, Dest, Msg, _Options) ->
 %%  we assume that processes do only send timeouts to themselves and ignore Options
-%%  TODO: add Time in data structures later
-%%  TODO: where to store MsgContent in sched_event?
-  TimerRef = make_ref(),
-  gen_server:cast(MIL, {enable_to, {Dest, Dest, erlang, send, [{mil_timeout, TimerRef, Msg}]}}),
-%%  return TimerRef as result
+%%  the Args will be updated with the TimerRef
+%%  erlang:display(["Time", Time, "Dest", Dest, "Msg", Msg]),
+  TimerRef = gen_server:call(MIL, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
   TimerRef.
 
-%% TODO: update interface
-%% shall return true or false
 disable_timeout(MIL, Proc, TimerRef) ->
-  {ok, Result} = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
+  Result = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
   Result.
+
+fire_timeout(MIL, Proc, TimerRef) ->
+  Result = gen_server:call(MIL, {fire_to, {Proc, TimerRef}}),
+  Result.
+
+poll_timeouts(MIL) ->
+  EnabledTimeouts = gen_server:call(MIL, {poll_to}),
+  EnabledTimeouts.
 
 %% client requests, removed for the time being
 %%client_req(MIL, ClientName, Coordinator, ClientCmd) ->
@@ -121,15 +127,50 @@ start(Scheduler) ->
 init([Scheduler]) ->
   {ok, #state{scheduler_id = Scheduler}}.
 
+handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, MsgContent}]}}, _From,
+    State = #state{})
+  when not is_tuple(ProcPid)->
+  TimerRef = make_ref(),
+  Args = [ProcPid, {mil_timeout, TimerRef, MsgContent}],
+  Proc = pid_to_node(State, ProcPid),
+  Bool_crashed = check_if_crashed(State, Proc) or check_if_crashed(State, Proc),
+  case Bool_crashed of
+    true ->
+%%      still log this event for matching later on
+      logger:info("enable_to_crsh", #{what => enable_to_crsh, id => State#state.id_counter,
+        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+      NextID = State#state.id_counter + 1,
+      {reply, TimerRef, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
+    _ ->
+      OrddictToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
+      UpdatedOrddict = orddict:append(TimerRef, {Time, Module, Fun, Args}, OrddictToUpdate),
+      UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedOrddict, State#state.enabled_timeouts),
+      logger:info("enable_to", #{what => enable_to, id => TimerRef,
+        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+%%      erlang:display(["enable_to", "MsgRef", MsgRef, "From", Proc, "To", Proc, "Mod", Module, "Func", Fun, "Args", Args]),
+      {reply, TimerRef, State#state{enabled_timeouts = UpdatedEnabledTimeouts}}
+  end;
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
   Proc = pid_to_node(State, ProcPid),
-  {Skipped, NewEnabledTimeouts} = find_enabled_to_and_get_updated_to_in_transit(State, Proc, TimerRef),
+  {_TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
 %%  erlang:display(["disable_to", "Id", MsgRef, "From", Proc, "To", Proc]),
-  logger:info("disable_to", #{what => disable_to, id => undefined,
-    from => Proc, to => Proc, skipped => Skipped}),
+  logger:info("disable_to", #{what => disable_to, id => TimerRef,
+    from => Proc, to => Proc}),
   {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
-%% TODO: add case where timeout is not available anymore and return false
+handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
+%%  Proc = pid_to_node(State, ProcPid),
+  {TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
+%%  erlang:display(["fire_to", "Id", TimerRef, "From", Proc, "To", Proc]),
+  [{_Time, Mod, Func, Args}] = TimeoutValue,
+  erlang:apply(Mod, Func, Args),
+  logger:info("fire_to", #{what => fire_to, id => TimerRef,
+    from => Proc, to => Proc}),
+  {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
+handle_call({poll_to}, _From, State = #state{}) ->
+%%  erlang:display(["poll_to"]),
+  {reply, State#state.enabled_timeouts, State};
 handle_call(_Request, _From, State) ->
+  erlang:throw("unhandled call"),
   {reply, ok, State}.
 
 handle_cast({start}, State) ->
@@ -146,7 +187,7 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.commands_in_transit, CmdOrddictNewQueues),
-  NewTimeoutList = orddict:store(NodeName, queue:new(), State#state.enabled_timeouts),
+  NewTimeoutList = orddict:store(NodeName, orddict:new(), State#state.enabled_timeouts),
   logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
                         commands_in_transit = NewCommandStore,
@@ -199,31 +240,6 @@ handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{
                                 from => From, to => To, skipped => Skipped,
                                 mod => Mod, func => Func, args => Args}),
   {noreply, State#state{commands_in_transit = NewCommandStore}};
-%%
-%%
-handle_cast({enable_to, {ProcPid, ProcPid, Module, Fun, Args = [{mil_timeout, TimerRef, _MsgContent}]}},
-            State = #state{})
-%% TODO: handle timeouts in a way that schedulers can use them
-  when not is_tuple(ProcPid)->
-  Proc = pid_to_node(State, ProcPid),
-  Bool_crashed = check_if_crashed(State, Proc) or check_if_crashed(State, Proc),
-  if
-    Bool_crashed ->
-%%      still log this event for matching later on
-      logger:info("enable_to_crsh", #{what => enable_to_crsh, id => State#state.id_counter,
-        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
-      NextID = State#state.id_counter + 1,
-      {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
-    {noreply, State};
-    true ->
-      QueueToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
-      UpdatedQueue = queue:in({TimerRef, Module, Fun, Args}, QueueToUpdate),
-      UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedQueue, State#state.enabled_timeouts),
-      logger:info("enable_to", #{what => enable_to, id => TimerRef,
-                from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
-%%      erlang:display(["enable_to", "MsgRef", MsgRef, "From", Proc, "To", Proc, "Mod", Module, "Func", Fun, "Args", Args]),
-      {noreply, State#state{enabled_timeouts = UpdatedEnabledTimeouts}}
-  end;
 %%
 %% TODO: change to "wait for new events" or similiar
 handle_cast({noop, {}}, State = #state{}) ->
@@ -374,21 +390,14 @@ find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
 %%  TODO: assumes that ID is in there
   end.
 
-find_enabled_to_and_get_updated_to_in_transit(State, Proc, MsgRef) ->
-  QueueToSearch = orddict:fetch(Proc, State#state.enabled_timeouts),
-  {_, Skipped, UpdatedQueue} = find_to_in_queue(QueueToSearch, MsgRef), % we let MsgRef act as ID for timeouts (for now)
-  NewEnabledTimeouts = orddict:store(Proc, UpdatedQueue, State#state.enabled_timeouts),
-  {Skipped, NewEnabledTimeouts}.
-
-find_to_in_queue(QueueToSearch, Id) ->
-  find_to_in_queue([], QueueToSearch, Id).
-
-find_to_in_queue(SkippedList, TailQueueToSearch, Ref) ->
-  {{value, {CurrentRef, _CurrentMod, _CurrentFun, _CurrentArgs}}, NewTailQueueToSearch} = queue:out(TailQueueToSearch),
-  case CurrentRef == Ref  of
-    true -> ReversedSkipped = lists:reverse(SkippedList),
-      {CurrentRef, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
-%%    skipped does only contain the IDs
-    false -> find_id_in_queue([CurrentRef | SkippedList], NewTailQueueToSearch, Ref)
-%%  TODO: assumes that ID is in there
-  end.
+find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef) ->
+  OrddictToSearch = orddict:fetch(Proc, State#state.enabled_timeouts),
+  Result = orddict:take(TimerRef, OrddictToSearch),
+  {Value, UpdatedOrddict} =
+    case Result of
+      {SomeValue, OrddictWO} -> {SomeValue, OrddictWO};
+      error -> erlang:display("attempt to disable timeout which was not enabled"),
+                        {undefined, OrddictToSearch}
+    end,
+  NewEnabledTimeouts = orddict:store(Proc, UpdatedOrddict, State#state.enabled_timeouts),
+  {Value, NewEnabledTimeouts}.

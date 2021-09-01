@@ -1115,7 +1115,7 @@ loop_receive(
                 %%
 %%      MIL TIMEOUT
 		{mil_timeout,TimerRef,TimeoutType} ->
-                erlang:display("received timeout"),
+%%                erlang:display("received timeout"),
 %%      LIM TIMEOUT
                     case S#state.timers of
                         #{TimeoutType := {TimerRef,TimeoutMsg}} = Timers
@@ -2291,7 +2291,8 @@ loop_timeouts_cancel(
               NextEventsR, Hibernate, TimeoutsR, Postponed,
               Timers_1, Seen#{TimeoutType => true}, TimeoutEvents);
         #{} ->
-            erlang:display("Do not quite know when this happens so check if/when?"),
+%%          TODO: investigate this, happens for 2 test cases of gen_mi_statem
+%%            erlang:display("Do not quite know when this happens so check if/when?"),
             loop_timeouts(
               P, Debug, S,
               Events, NextState_NewData,

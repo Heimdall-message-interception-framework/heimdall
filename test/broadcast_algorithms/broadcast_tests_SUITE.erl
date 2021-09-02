@@ -25,11 +25,11 @@ groups() -> [
 
 init_per_group(rco_tests, Config) ->
     % register reliable_broadcast observer
-    gen_event:add_handler({global, om}, rb_observer, []),
+    gen_event:add_handler({global, om}, universal_observer, []),
     [{broadcast, causal_broadcast} | Config];
 init_per_group(rb_tests, Config) ->
     % register reliable_broadcast observer
-    gen_event:add_handler({global, om}, rb_observer, []),
+    gen_event:add_handler({global, om}, universal_observer, []),
     [{broadcast, reliable_broadcast} | Config];
 init_per_group(be_tests, Config) ->
     [{broadcast, best_effort_broadcast_paper} | Config].
@@ -95,11 +95,10 @@ no_crash_test(Config) ->
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
 
-    % Create 3 chat servers using best effort broadcast:
     B = ?config(broadcast, Config),
-    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
-    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
-    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
+    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc1", []) end),
+    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc2", []) end),
+    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc3", []) end),
 
     % post a message to chatserver 1
     Chat1 ! {post, self(), 'Hello everyone!'},
@@ -127,9 +126,9 @@ with_crash_test(Config) ->
 
     % Create 3 chat servers using best effort broadcast:
     B = ?config(broadcast, Config),
-    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
-    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
-    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
+    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc1", []) end),
+    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc2", []) end),
+    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc3", []) end),
 
     % crash chatserver 2 after 100ms
     timer:sleep(100),
@@ -158,9 +157,9 @@ causal_ordering_test(Config) ->
 
     % Create 3 chat servers using broadcast set in config:
     B = ?config(broadcast, Config),
-    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc1, []) end),
-    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc2, []) end),
-    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, bc3, []) end),
+    Chat1 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc1", []) end),
+    Chat2 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc2", []) end),
+    Chat3 = spawn_link(fun() -> chat_loop_simplified(B, LL, undefined, "bc3", []) end),
 
     % post a message to chatserver 1
     Chat1 ! {post, self(), 'Hello everyone!'},

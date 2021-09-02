@@ -31,7 +31,7 @@ init([LL, Name, R]) ->
 	{ok, #state{
 		beb = Beb,
 		deliver_to = R,
-		self = Name,
+		self = unicode:characters_to_list([Name| "_rb"]),
 		local_delivered = sets:new()
 	}}.
 
@@ -47,7 +47,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 	% update state
 	NewDelivered = sets:add_element({State#state.self, Mid}, State#state.local_delivered),
 	%%% MIL
-    gen_event:sync_notify({global,om}, {update, "local_delivered", State#state.local_delivered, NewDelivered}),
+    gen_event:sync_notify({global,om}, {update, State#state.self, "local_delivered", State#state.local_delivered, NewDelivered}),
 	%%% LIM
 	{reply, ok, State#state{local_delivered = NewDelivered}}.
 
@@ -63,7 +63,7 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			% beb-broadcast again
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			%%% MIL
-			gen_event:sync_notify({global,om}, {update, "local_delivered", State#state.local_delivered, NewDelivered}),
+			gen_event:sync_notify({global,om}, {update, State#state.self, "local_delivered", State#state.local_delivered, NewDelivered}),
 			%%% LIM
 			{noreply, State#state{local_delivered = NewDelivered}}
 	end;

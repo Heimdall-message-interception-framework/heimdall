@@ -30,7 +30,7 @@ init([LL, Name, R]) ->
     {ok,
      #state{rb = Rb,
             deliver_to = R,
-            self = Name,
+            self = unicode:characters_to_list([Name| "_rco"]),
             pending = sets:new(),
             vc = vectorclock:new()}}.
 

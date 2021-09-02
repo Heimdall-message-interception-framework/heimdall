@@ -30,7 +30,7 @@ init([LL, Name, R]) ->
 	{ok, #state{
 		link_layer = LL,
 		deliver_to = R,
-		self = Name
+		self = unicode:characters_to_list([Name| "_be"])
 	}}.
 
 -spec handle_call({'broadcast', bc_types:message()}, _, #state{link_layer::pid(), deliver_to::pid(), self::atom()}) -> {'reply', 'ok', #state{link_layer::pid(), deliver_to::pid(), self::atom()}}.

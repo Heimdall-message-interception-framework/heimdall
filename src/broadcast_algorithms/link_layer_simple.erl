@@ -38,7 +38,7 @@ handle_call({send, Data, From, To}, _From, State) ->
 
 % registers client nodes on the link layer, they can afterwards be contacted by other nodes
 handle_call({register, Name, R}, _From, State) ->
-    NewName = list_to_atom(atom_to_list(Name) ++ pid_to_list(R)),
+    NewName = unicode:characters_to_list(Name ++ pid_to_list(R)),
     %%% MIL
     MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     case MIL of

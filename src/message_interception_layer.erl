@@ -47,6 +47,7 @@ start_msg_int_layer(MIL) ->
 %% registration of processes
 
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
+  erlang:display(["Registration at MIL", "Name", Name, "Id", Identifier, "Kind", Kind]),
   gen_server:cast(MIL, {register, {Name, Identifier, Kind}}).
 
 register_client(MIL, Name) ->
@@ -88,10 +89,13 @@ enable_timeout(MIL, Time, Dest, Msg, _Options) ->
   TimerRef.
 
 disable_timeout(MIL, Proc, TimerRef) ->
+  erlang:display("disable to"),
   Result = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
   Result.
 
 fire_timeout(MIL, Proc, TimerRef) ->
+%%  erlang:display(["MIL", MIL, "Proc", Proc, "TimerRef", TimerRef]),
+%%  ok.
   Result = gen_server:call(MIL, {fire_to, {Proc, TimerRef}}),
   Result.
 
@@ -153,7 +157,7 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
   Proc = pid_to_node(State, ProcPid),
   {_TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
-%%  erlang:display(["disable_to", "Id", MsgRef, "From", Proc, "To", Proc]),
+  erlang:display(["disable_to", "Id", TimerRef, "From", Proc, "To", Proc]),
   logger:info("disable_to", #{what => disable_to, id => TimerRef,
     from => Proc, to => Proc}),
   {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
@@ -162,6 +166,7 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
   {TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
 %%  erlang:display(["fire_to", "Id", TimerRef, "From", Proc, "To", Proc]),
   [{_Time, Mod, Func, Args}] = TimeoutValue,
+  erlang:display(["Mod", Mod, "Func", Func, "Args", Args]),
   erlang:apply(Mod, Func, Args),
   logger:info("fire_to", #{what => fire_to, id => TimerRef,
     from => Proc, to => Proc}),
@@ -189,7 +194,8 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   NewCommandStore = orddict:merge(Fun, State#state.commands_in_transit, CmdOrddictNewQueues),
   NewTimeoutList = orddict:store(NodeName, orddict:new(), State#state.enabled_timeouts),
   logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
-  {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid, registered_pid_nodes = NewRegisteredPidNodes,
+  {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid,
+                        registered_pid_nodes = NewRegisteredPidNodes,
                         commands_in_transit = NewCommandStore,
                         enabled_timeouts = NewTimeoutList}};
 %%
@@ -201,7 +207,6 @@ handle_cast({register_client, {ClientName}}, State = #state{}) ->
 %%
 handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
   when not is_tuple(ToPid)->
-%%  erlang:display(["FromPid", FromPid, "ToPid", ToPid]),
   From = pid_to_node(State, FromPid),
   To = case is_pid(ToPid) of
          true -> pid_to_node(State, ToPid);
@@ -226,6 +231,7 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
                                     [{State#state.id_counter, From, To, Module, Fun, Args}],
       logger:info("cmd_rcv", #{what => cmd_rcv, id => State#state.id_counter,
                                 from => From, to => To, mod => Module, func => Fun, args => Args}),
+      erlang:display(["cmd_rcv", "Id", State#state.id_counter, "From", From, "To", To, "Mod", Module, "Func", Fun, "Args", Args]),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{commands_in_transit = UpdatedCommandsInTransit,
         new_commands_in_transit = UpdatedNewCommandsInTransit,
@@ -305,7 +311,11 @@ handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
     ListQueuesToDelete),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
   logger:info("perm_crsh", #{what => perm_crs, name => NodeName}),
-  {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm, commands_in_transit = NewCommandStore}}.
+  {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm, commands_in_transit = NewCommandStore}};
+%%
+handle_cast(Msg, State) ->
+  io:format("[cb] received unhandled cast: ~p~n", [Msg]),
+  {noreply, State}.
 
 
 handle_info(trigger_get_events, State = #state{}) ->
@@ -330,7 +340,7 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 pid_to_node(State, Pid) ->
   case orddict:find(Pid, State#state.registered_pid_nodes) of
     {ok, Node} -> Node;
-    _ -> erlang:error(pid_not_registered)
+    _ -> erlang:error([pid_not_registered, Pid])
   end.
 
 %%client_pid(State, Node) ->

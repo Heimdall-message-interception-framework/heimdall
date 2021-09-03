@@ -14,7 +14,7 @@
 
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 50).
--define(TIMEOUTINTERVAL, 500).
+-define(TIMEOUTINTERVAL, 5000).
 -define(MIL, State#state.message_interception_layer_id).
 
 -record(state, {

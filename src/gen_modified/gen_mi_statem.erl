@@ -637,15 +637,14 @@ reply(Replies) when is_list(Replies) ->
 -compile({inline, [reply/2]}).
 -spec reply(From :: from(), Reply :: term()) -> ok.
 reply(From, Reply) ->
-%%    erlang:display(["REPLY req", "self", self(), "From", From, "Reply", Reply]),
+    erlang:display(["mi_stm 640 REPLY req", "self", self(), "From", From, "Reply", Reply]),
   %%  MIL
 %%  decided not to do this layer deeper since there are three cases then
-    MIL = application:get_env(sched_msg_interception_layer, msg_int_layer, undefined),
-    case MIL of
-      undefined -> ok;
-      _ -> {FromWoRef, _} = From,
-           message_interception_layer:msg_command(MIL, self(), FromWoRef, gen_mi, reply, [From, Reply])
-    end,
+    MIL = msg_interception_helpers:get_message_interception_layer(),
+%%  TODO: check why we need this
+    {FromWoRef, _} = From,
+    erlang:display(["mi_stm 646", "MIL", MIL, "From", From]),
+    message_interception_layer:msg_command(MIL, self(), FromWoRef, gen_mi, reply, [From, Reply]),
 %%    gen_mi:reply(From, Reply). % removed for MIL
     ok. % added this is the only return value of this function
   %%  LIM
@@ -699,7 +698,7 @@ wrap_cast(Event) ->
     {'$gen_cast',Event}.
 
 call_dirty(ServerRef, Request, Timeout, T) ->
-%%    erlang:display(["CALL req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
+    erlang:display(["CALL req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     try gen_mi:call(ServerRef, '$gen_call', Request, T) of
         {ok,Reply} ->
             Reply
@@ -727,18 +726,15 @@ call_clean(ServerRef, Request, Timeout, T) ->
     %% communicate with a node that does not understand aliases.
     %% This can be removed when alias support is mandatory.
     %% Probably in OTP 26.
-%%    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
+    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     Ref = make_ref(),
     Self = self(),
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    Pid = spawn(
+    MIL = msg_interception_helpers:get_message_interception_layer(),
+    _Pid = spawn(
             fun () ->
 %%              MIL
-              case MIL of
-                undefined -> ok;
-                _ -> message_interception_layer:register_with_name(MIL,
-                       list_to_atom(pid_to_list(self())), self(), middle_proc)
-              end,
+              message_interception_layer:register_with_name(MIL,
+                       list_to_atom(pid_to_list(self())), self(), middle_proc),
 %%              erlang:display(["SPAWN of CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
               Response = try gen_mi:call(
                           ServerRef, '$gen_call', Request, T) of
@@ -747,19 +743,15 @@ call_clean(ServerRef, Request, Timeout, T) ->
                        catch Class:Reason:Stacktrace ->
                           {Ref,Class,Reason,Stacktrace}
                        end,
-%%              erlang:display(["Response", Response]),
-%%              according to documentation of erlang:send the same as !
-%%              TODO: add check here?
               message_interception_layer:msg_command(MIL, self(), Self, erlang, send, [Self, Response]),
               Response % return value?
 %%              Self ! Response % removed for MIL
 %%              LIM; before the Response was inlined in the send operation
             end),
-%%  MIL: removed monitoring since the process dies early, TODO: fix differently
+%%  MIL: removed monitoring since the process dies early,
 %%      Mref = monitor(process, Pid),
-%%              TODO: add check here?
-      MsgRef = make_ref(),
-      message_interception_layer:enable_timeout(MIL, self(), MsgRef),
+      TimerRef = message_interception_layer:enable_timeout(MIL, self(), Timeout, timeout),
+      erlang:display(["mi_stm 758", "TimerRef", TimerRef]),
       ResultRcv = receive
                     {Ref,Result} ->
 %%                        erlang:display("gen_mi_stm:761"),
@@ -781,11 +773,11 @@ call_clean(ServerRef, Request, Timeout, T) ->
                         %% proxy process gets killed between try--of and !
                         %% so this clause is in case of that
           %%              exit(Reason)
-                    {mil_timeout, MsgRef, _} ->
+                    {mil_timeout,TimerRef,timeout} ->
 %%                      erlang:display("received timeout") % not handled before
                         ok
       end,
-      message_interception_layer:disable_timeout(MIL, self(), MsgRef),
+      message_interception_layer:disable_timeout(MIL, self(), TimerRef),
       ResultRcv.
 %%      LIM
 
@@ -800,7 +792,8 @@ send(Proc, Msg) ->
   %%  MIL
     MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
     case MIL of
-      undefined -> ok;
+%%      TODO: amend
+      undefined -> erlang:display("undefined actually");
       _ -> message_interception_layer:msg_command(MIL, self(), Proc, erlang, send, [Proc, Msg])
     end,
 %%  removed for MIL but
@@ -821,7 +814,7 @@ enter(
 enter(
   Parent, Debug, Module, Name, HibernateAfterTimeout,
 %%    MIL TODO: remove adding MIL here?
-  State, Data, Actions, MIL) ->
+  State, Data, Actions, _MIL) ->
     %% The values should already have been type checked
     Q = [{internal,init_state}],
     %% We enforce {postpone,false} to ensure that
@@ -892,8 +885,8 @@ init_result(
 %%      MIL
   {ok,State,Data,Actions,MIL} ->
       proc_lib:init_ack(Starter, {ok,self()}),
-      %% register process with MIL; FIX: function call?
-      message_interception_layer:register_with_name(MIL, Name, whereis(Name), Module),
+      %% register process with MIL
+%%      message_interception_layer:register_with_name(MIL, Name, whereis(Name), Module),
       enter(
         Parent, Debug, Module, Name, HibernateAfterTimeout,
         State, Data, Actions, MIL);
@@ -1107,6 +1100,7 @@ loop_receive(
     %%
     receive
     Msg ->
+      erlang:display(["gen_mi_stm 1103", "Msg", Msg]),
 	    case Msg of
                 {'$gen_call',From,Request} ->
                     loop_receive_result(P, Debug, S, {{call,From},Request});
@@ -1114,7 +1108,7 @@ loop_receive(
                     loop_receive_result(P, Debug, S, {cast,Cast});
                 %%
 %%      MIL TIMEOUT
-		{mil_timeout,TimerRef,TimeoutType} ->
+      {mil_timeout,TimerRef,TimeoutType} ->
 %%                erlang:display("received timeout"),
 %%      LIM TIMEOUT
                     case S#state.timers of
@@ -1201,6 +1195,7 @@ loop_event_handler(
     %% restored when looping back to loop/3 or loop_event/5.
     %%
     Q = [Event|Events],
+    erlang:display(["mi_stm 1198", "Event", Event]),
     loop_state_callback(P, Debug, S, Q, State_Data, Event).
 
 %% Make a state enter call to the state function, we loop back here
@@ -1265,7 +1260,10 @@ loop_state_callback(
     try
 	case CallbackMode of
 	    state_functions ->
-		Module:State(Type, Content, Data);
+        erlang:display(["mi_stm 1263", "Type", Type, "Content", Content]),
+        ResultZ = Module:State(Type, Content, Data),
+        erlang:display(["mi_stm 1265", "Result", ResultZ]),
+        ResultZ;
 	    handle_event_function ->
 		Module:handle_event(Type, Content, State, Data)
 	end
@@ -2173,11 +2171,12 @@ loop_timeouts_start(
               TimeoutType, Time, TimeoutMsg, TimeoutOpts, TimerRef);
         _ ->
             %% (Re)start the timer
+%%          MIL
             MIL = msg_interception_helpers:get_message_interception_layer(),
             TimerRef =
-%%            MIL TIMEOUT TODO
-%%                erlang:start_timer(Time, self(), TimeoutType, TimeoutOpts),
-                  message_interception_layer:enable_timeout(MIL, Time, self(), TimeoutType, TimeoutOpts),
+              message_interception_layer:enable_timeout(MIL, Time, self(), TimeoutType, TimeoutOpts),
+            erlang:display(["mi_stm 2175", "TimerRef", TimerRef]),
+%%          LIM
             loop_timeouts_register(
               P, Debug, S,
               Events, NextState_NewData,

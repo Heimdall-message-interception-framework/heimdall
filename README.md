@@ -25,13 +25,9 @@ to be run on top level of the respective repo
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_mi_tests_SUITE.erl
     rebar3 ct --suite=test/broadcast_algorithms/broadcast_tests_SUITE.erl
 
-Testcases for Raft
------
-do NOT work yet again since timeouts need to be incorporated
+`ra_kv_store`:
 
     rebar3 ct --suite=test/store_SUITE.erl
-
-
 
 Testcases That do NOT Work (yet again)
 -----

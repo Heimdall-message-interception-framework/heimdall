@@ -47,7 +47,6 @@ start_msg_int_layer(MIL) ->
 %% registration of processes
 
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
-  erlang:display(["Registration at MIL", "Name", Name, "Id", Identifier, "Kind", Kind]),
   gen_server:cast(MIL, {register, {Name, Identifier, Kind}}).
 
 register_client(MIL, Name) ->
@@ -84,12 +83,10 @@ enable_timeout(MIL, Time, Dest, Msg) ->
 enable_timeout(MIL, Time, Dest, Msg, _Options) ->
 %%  we assume that processes do only send timeouts to themselves and ignore Options
 %%  the Args will be updated with the TimerRef
-%%  erlang:display(["Time", Time, "Dest", Dest, "Msg", Msg]),
   TimerRef = gen_server:call(MIL, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
   TimerRef.
 
 disable_timeout(MIL, Proc, TimerRef) ->
-  erlang:display("disable to"),
   Result = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
   Result.
 
@@ -157,7 +154,7 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
   Proc = pid_to_node(State, ProcPid),
   {_TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
-  erlang:display(["disable_to", "Id", TimerRef, "From", Proc, "To", Proc]),
+%%  erlang:display(["disable_to", "Id", TimerRef, "From", Proc, "To", Proc]),
   logger:info("disable_to", #{what => disable_to, id => TimerRef,
     from => Proc, to => Proc}),
   {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
@@ -166,7 +163,7 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
   {TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
 %%  erlang:display(["fire_to", "Id", TimerRef, "From", Proc, "To", Proc]),
   [{_Time, Mod, Func, Args}] = TimeoutValue,
-  erlang:display(["Mod", Mod, "Func", Func, "Args", Args]),
+%%  erlang:display(["Mod", Mod, "Func", Func, "Args", Args]),
   erlang:apply(Mod, Func, Args),
   logger:info("fire_to", #{what => fire_to, id => TimerRef,
     from => Proc, to => Proc}),
@@ -231,7 +228,7 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
                                     [{State#state.id_counter, From, To, Module, Fun, Args}],
       logger:info("cmd_rcv", #{what => cmd_rcv, id => State#state.id_counter,
                                 from => From, to => To, mod => Module, func => Fun, args => Args}),
-      erlang:display(["cmd_rcv", "Id", State#state.id_counter, "From", From, "To", To, "Mod", Module, "Func", Fun, "Args", Args]),
+%%      erlang:display(["cmd_rcv", "Id", State#state.id_counter, "From", From, "To", To, "Mod", Module, "Func", Fun, "Args", Args]),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{commands_in_transit = UpdatedCommandsInTransit,
         new_commands_in_transit = UpdatedNewCommandsInTransit,

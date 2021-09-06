@@ -548,28 +548,24 @@ stop(ServerRef, Reason, Timeout) ->
 -spec cast(ServerRef :: server_ref(), Msg :: term()) -> ok.
 cast(ServerRef, Msg) when is_pid(ServerRef) ->
 %%    erlang:display(["CAST req", "self", self(), "ServerRef", ServerRef, "Msg", Msg]),
-%%  MIL, sends here in statem
     send(ServerRef, wrap_cast(Msg));
 cast(ServerRef, Msg) when is_atom(ServerRef) ->
-%%  MIL TODO: also change these sends but not used in raft-implementation
-%%    erlang:display("t2"),
     send(ServerRef, wrap_cast(Msg));
 cast({global,Name}, Msg) ->
-%%    erlang:display("t3"),
+    erlang:display("gen_mi_statem 555: If this message pops up, we need to amend the code"),
     try	global:send(Name, wrap_cast(Msg)) of
     _ -> ok
       catch
     _:_ -> ok
     end;
 cast({via,RegMod,Name}, Msg) ->
-%%    erlang:display("t4"),
+    erlang:display("gen_mi_statem 562: If this message pops up, we need to amend the code"),
     try	RegMod:send(Name, wrap_cast(Msg)) of
     _ -> ok
       catch
     _:_ -> ok
     end;
 cast({Name,Node} = ServerRef, Msg) when is_atom(Name), is_atom(Node) ->
-%%    erlang:display("t5"),
     send(ServerRef, wrap_cast(Msg)).
 
 %% Call a state machine (synchronous; a reply is expected) that
@@ -637,13 +633,12 @@ reply(Replies) when is_list(Replies) ->
 -compile({inline, [reply/2]}).
 -spec reply(From :: from(), Reply :: term()) -> ok.
 reply(From, Reply) ->
-    erlang:display(["mi_stm 640 REPLY req", "self", self(), "From", From, "Reply", Reply]),
+%%    erlang:display(["mi_stm 640 REPLY req", "self", self(), "From", From, "Reply", Reply]),
   %%  MIL
 %%  decided not to do this layer deeper since there are three cases then
     MIL = msg_interception_helpers:get_message_interception_layer(),
-%%  TODO: check why we need this
+%%  TODO: check why we need this look into tuple
     {FromWoRef, _} = From,
-    erlang:display(["mi_stm 646", "MIL", MIL, "From", From]),
     message_interception_layer:msg_command(MIL, self(), FromWoRef, gen_mi, reply, [From, Reply]),
 %%    gen_mi:reply(From, Reply). % removed for MIL
     ok. % added this is the only return value of this function
@@ -698,7 +693,7 @@ wrap_cast(Event) ->
     {'$gen_cast',Event}.
 
 call_dirty(ServerRef, Request, Timeout, T) ->
-    erlang:display(["CALL req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
+%%    erlang:display(["CALL req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     try gen_mi:call(ServerRef, '$gen_call', Request, T) of
         {ok,Reply} ->
             Reply
@@ -726,7 +721,7 @@ call_clean(ServerRef, Request, Timeout, T) ->
     %% communicate with a node that does not understand aliases.
     %% This can be removed when alias support is mandatory.
     %% Probably in OTP 26.
-    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
+%%    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     Ref = make_ref(),
     Self = self(),
     MIL = msg_interception_helpers:get_message_interception_layer(),
@@ -750,25 +745,21 @@ call_clean(ServerRef, Request, Timeout, T) ->
             end),
 %%  MIL: removed monitoring since the process dies early,
 %%      Mref = monitor(process, Pid),
-      TimerRef = message_interception_layer:enable_timeout(MIL, self(), Timeout, timeout),
-      erlang:display(["mi_stm 758", "TimerRef", TimerRef]),
+      TimerRef = message_interception_layer:enable_timeout(MIL, Timeout, self(), timeout),
       ResultRcv = receive
                     {Ref,Result} ->
-%%                        erlang:display("gen_mi_stm:761"),
           %%              demonitor(Mref, [flush]),
                         case Result of
                             {ok,Reply} ->
                                 Reply
                         end;
                     {Ref,Class,Reason,Stacktrace} ->
-%%                      erlang:display("gen_mi_stm:768"),
           %%            demonitor(Mref, [flush]),
                         erlang:raise(
                           Class,
                           {Reason,{?MODULE,call,[ServerRef,Request,Timeout]}},
                           Stacktrace);
           %%          {'DOWN',Mref,_,_,Reason} ->
-          %%            erlang:display("gen_mi_stm:775"),
                       %% There is a theoretical possibility that the
                         %% proxy process gets killed between try--of and !
                         %% so this clause is in case of that
@@ -790,12 +781,8 @@ replies([]) ->
 %% Might actually not send the message in case of caught exception
 send(Proc, Msg) ->
   %%  MIL
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    case MIL of
-%%      TODO: amend
-      undefined -> erlang:display("undefined actually");
-      _ -> message_interception_layer:msg_command(MIL, self(), Proc, erlang, send, [Proc, Msg])
-    end,
+    MIL = msg_interception_helpers:get_message_interception_layer(),
+    message_interception_layer:msg_command(MIL, self(), Proc, erlang, send, [Proc, Msg]),
 %%  removed for MIL but
 %%    try erlang:send(Proc, Msg)
 %%    catch
@@ -1100,7 +1087,6 @@ loop_receive(
     %%
     receive
     Msg ->
-      erlang:display(["gen_mi_stm 1103", "Msg", Msg]),
 	    case Msg of
                 {'$gen_call',From,Request} ->
                     loop_receive_result(P, Debug, S, {{call,From},Request});
@@ -1195,7 +1181,6 @@ loop_event_handler(
     %% restored when looping back to loop/3 or loop_event/5.
     %%
     Q = [Event|Events],
-    erlang:display(["mi_stm 1198", "Event", Event]),
     loop_state_callback(P, Debug, S, Q, State_Data, Event).
 
 %% Make a state enter call to the state function, we loop back here
@@ -1260,10 +1245,7 @@ loop_state_callback(
     try
 	case CallbackMode of
 	    state_functions ->
-        erlang:display(["mi_stm 1263", "Type", Type, "Content", Content]),
-        ResultZ = Module:State(Type, Content, Data),
-        erlang:display(["mi_stm 1265", "Result", ResultZ]),
-        ResultZ;
+        Module:State(Type, Content, Data);
 	    handle_event_function ->
 		Module:handle_event(Type, Content, State, Data)
 	end
@@ -2175,7 +2157,6 @@ loop_timeouts_start(
             MIL = msg_interception_helpers:get_message_interception_layer(),
             TimerRef =
               message_interception_layer:enable_timeout(MIL, Time, self(), TimeoutType, TimeoutOpts),
-            erlang:display(["mi_stm 2175", "TimerRef", TimerRef]),
 %%          LIM
             loop_timeouts_register(
               P, Debug, S,

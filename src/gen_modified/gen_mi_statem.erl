@@ -1246,6 +1246,7 @@ loop_state_callback(
 	case CallbackMode of
 	    state_functions ->
         Module:State(Type, Content, Data);
+%%    TODO
 	    handle_event_function ->
 		Module:handle_event(Type, Content, State, Data)
 	end
@@ -1337,6 +1338,8 @@ loop_state_callback_result(
   NextEventsR, Hibernate, TimeoutsR, Postpone,
   StateCall, Result) ->
     %%
+%%  here, we can switch on posting events in state machine
+%%    post_observation_events(State, _Data, Result, StateCall),
     case Result of
 	{next_state,State,NewData} ->
             loop_actions(
@@ -2934,3 +2937,62 @@ list_timeouts(Timers) ->
            (TimeoutType, {_TimerRef,TimeoutMsg}, Acc) ->
                [{TimeoutType,TimeoutMsg}|Acc]
        end, [], Timers)}.
+
+%%%% function to output callback_result as events for observer
+%%post_observation_events(PrevState, _PrevData, Result, StateCall) ->
+%%  case Result of
+%%    {next_state,State,NewData} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, State}, {new_data, NewData}}});
+%%    {next_state,NextState,NewData}
+%%      when StateCall ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, NextState}, {new_data, NewData}}});
+%%    {next_state,_NextState,_NewData} ->
+%%%%      for completeness
+%%      ok;
+%%    {next_state,State,NewData,_Actions} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, State}, {new_data, NewData}}});
+%%    {next_state,NextState,NewData,_Actions}
+%%      when StateCall ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, NextState}, {new_data, NewData}}});
+%%    {next_state,_NextState,_NewData,_Actions} ->
+%%%%      for completeness
+%%      ok;
+%%    %%
+%%    {keep_state,NewData} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, NewData}}});
+%%    {keep_state,NewData,_Actions} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, NewData}}});
+%%    %%
+%%    keep_state_and_data ->
+%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, PrevData}}});
+%%      ok;
+%%    {keep_state_and_data,_Actions} ->
+%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, PrevData}}});
+%%      ok;
+%%    %%
+%%    {repeat_state,NewData} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, NewData}}});
+%%    {repeat_state,NewData,_Actions} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, NewData}}});
+%%    %%
+%%    repeat_state_and_data ->
+%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, PrevData}}});
+%%      ok;
+%%    {repeat_state_and_data,_Actions} ->
+%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, PrevData}}});
+%%      ok;
+%%    %%
+%%    stop ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}}});
+%%    {stop,Reason} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}}});
+%%    {stop,Reason,NewData} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {new_data, NewData}}});
+%%    %%
+%%    {stop_and_reply,Reason,Replies} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {replies, Replies}}});
+%%    {stop_and_reply,Reason,Replies,NewData} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {replies, Replies}, {new_data, NewData}}});
+%%    %%
+%%    _ -> ok
+%%  end.

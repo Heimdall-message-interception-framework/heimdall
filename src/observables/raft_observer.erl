@@ -1,5 +1,4 @@
--module(universal_observer).
-% a universal observer which tracks changes to every instrumented variable and message. Every change is logged to stdout.
+-module(raft_observer).
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
@@ -16,7 +15,13 @@ handle_event({process, ProcEvent}, State) ->
     NewState = add_to_history(State, {process, ProcEvent}),
     % TODO: do sth. concrete for observer here
     {ok, NewState};
-%%
+handle_event({process, #obs_process_event{process = Proc, event_type = EvType, event_content = EvContent}}, State) ->
+    case EvType of
+        ra_machine -> ok;
+        ra_log -> ok;
+        gen_mi_statem -> ok
+    end,
+    {ok, State};
 handle_event({sched, SchedEvent}, State) ->
 %%    store event in history of events
     NewState = add_to_history(State, {sched, SchedEvent}),

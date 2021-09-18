@@ -42,6 +42,7 @@
 %%%===================================================================
 
 start_msg_int_layer(MIL) ->
+%%  add new ets table
   gen_server:cast(MIL, {start}).
 
 %% registration of processes

@@ -8,6 +8,7 @@
 
 init(_) ->
     {ok, #state{local_delivered = sets:new()}}.
+%% TODO: update according to general structure for events when using this later
 handle_event({update, "local_delivered", Old, New}, State) ->
     io:format("[rb_observer] 'local_delivered' changed from ~p to ~p~n", [Old,New]),
     {ok, State#state{local_delivered=New}};

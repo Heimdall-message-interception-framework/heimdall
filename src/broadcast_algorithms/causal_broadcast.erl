@@ -11,7 +11,7 @@
 -record(state,
         {rb :: bc_types:broadcast(), % best effort broadcast used for sending
          deliver_to :: pid(), % receiver
-         self :: atom(), % name of local process
+         self :: nonempty_string(), % name of local process
          pending :: sets:set(), % pending messages
          vc :: vectorclock:vectorclock()}). % local vectorclock
 
@@ -60,7 +60,7 @@ handle_info(Msg, State) ->
     io:format("[cb] received unknown message: ~p~n", [Msg]),
     {noreply, State}.
 
--spec deliver_pending(#state{deliver_to::pid(), self::atom(), pending::sets:set(_)}, sets:set(bc_types:message()), _) -> {sets:set(bc_types:message()), _}.
+-spec deliver_pending(#state{deliver_to::pid(), self::nonempty_string(), pending::sets:set(_)}, sets:set(bc_types:message()), _) -> {sets:set(bc_types:message()), _}.
 deliver_pending(State, Pending, Vc) ->
     CanDeliver = sets:filter(fun({_, VcQ, _}) -> vectorclock:le(VcQ, Vc) end, Pending),
     case sets:size(CanDeliver) of

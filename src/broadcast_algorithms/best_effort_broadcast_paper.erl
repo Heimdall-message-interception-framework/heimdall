@@ -11,10 +11,10 @@
 -record(state, {
 	link_layer	:: pid(), % link layer
 	deliver_to	:: pid(), % receiver
-	self		:: atom() % name of local process
+	self		:: nonempty_string() % name of local process
 }).
 
--spec start_link(pid(), atom(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
+-spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
@@ -33,7 +33,7 @@ init([LL, Name, R]) ->
 		self = unicode:characters_to_list([Name| "_be"])
 	}}.
 
--spec handle_call({'broadcast', bc_types:message()}, _, #state{link_layer::pid(), deliver_to::pid(), self::atom()}) -> {'reply', 'ok', #state{link_layer::pid(), deliver_to::pid(), self::atom()}}.
+-spec handle_call({'broadcast', bc_types:message()}, _, #state{link_layer::pid(), deliver_to::pid(), self::nonempty_string()}) -> {'reply', 'ok', #state{link_layer::pid(), deliver_to::pid(), self::nonempty_string()}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},

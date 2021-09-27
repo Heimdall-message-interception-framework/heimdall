@@ -11,12 +11,12 @@
 -record(state, {
 	beb			:: bc_types:broadcast(), % best effort broadcast used for sending
 	deliver_to	:: pid(), % receiver
-	self		:: atom(), % name of local process
+	self		:: nonempty_string(), % name of local process
 	max_mid	= 0 :: non_neg_integer(), % counter for ids
 	local_delivered :: sets:set()
 }).
 
--spec start_link(pid(), atom(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
+-spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
@@ -35,7 +35,7 @@ init([LL, Name, R]) ->
 		local_delivered = sets:new()
 	}}.
 
--spec handle_call({'broadcast', bc_types:message()}, _, #state{beb::pid(), deliver_to::pid(), self::atom(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}) -> {'reply', 'ok', #state{beb::pid(), deliver_to::pid(), self::atom(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}}.
+-spec handle_call({'broadcast', bc_types:message()}, _, #state{beb::pid(), deliver_to::pid(), self::nonempty_string(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}) -> {'reply', 'ok', #state{beb::pid(), deliver_to::pid(), self::nonempty_string(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},

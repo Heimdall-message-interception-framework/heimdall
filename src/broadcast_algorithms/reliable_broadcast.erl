@@ -1,6 +1,7 @@
 -module(reliable_broadcast).
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
+-include("../observables/observer_events.hrl").
 -behavior(gen_server).
 
 -export([start_link/3, broadcast/2]).
@@ -39,16 +40,32 @@ init([LL, Name, R]) ->
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
+	%%% OBS
+	Event = {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_delivered_event,
+		event_content = #bc_delivered_event{
+			message = Msg
+		}
+	}},
+    gen_event:sync_notify({global,om}, Event),
+	%%% SBO
 	% calculate new MaxId
 	Mids = lists:map(fun({_Pid, Mid}) -> Mid end, sets:to_list(State#state.local_delivered)),
 	Mid = lists:max([0|Mids]) + 2,
 	% broadcast to everyone
 	best_effort_broadcast_paper:broadcast(State#state.beb, {State#state.self, Mid, Msg}),
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_broadcast_event,
+		event_content = #bc_broadcast_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	% update state
 	NewDelivered = sets:add_element({State#state.self, Mid}, State#state.local_delivered),
-	%%% OBS
-    gen_event:sync_notify({global,om}, {update, State#state.self, "local_delivered", State#state.local_delivered, NewDelivered}),
-	%%% SBO
 	{reply, ok, State#state{local_delivered = NewDelivered}}.
 
 -spec handle_info({deliver, bc_types:message()}, _) -> {'noreply', _}.
@@ -59,11 +76,27 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			{noreply, State};
 		false ->
 			State#state.deliver_to ! {deliver, Msg},
+			%%% OBS
+			Event = {process, #obs_process_event{
+				process = State#state.self,
+				event_type = bc_delivered_event,
+				event_content = #bc_delivered_event{
+					message = Msg
+				}
+			}},
+			gen_event:sync_notify({global,om}, Event),
+			%%% SBO
 			NewDelivered = sets:add_element({Sender, Mid}, State#state.local_delivered),
 			% beb-broadcast again
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			%%% OBS
-			gen_event:sync_notify({global,om}, {update, State#state.self, "local_delivered", State#state.local_delivered, NewDelivered}),
+			gen_event:sync_notify({global,om}, {process, #obs_process_event{
+				process = State#state.self,
+				event_type = bc_broadcast_event,
+				event_content = #bc_broadcast_event{
+					message = Msg
+				}
+			}}),
 			%%% SBO
 			{noreply, State#state{local_delivered = NewDelivered}}
 	end;

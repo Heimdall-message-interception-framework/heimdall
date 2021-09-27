@@ -1,5 +1,6 @@
 -module(causal_broadcast).
 
+-include("../observables/observer_events.hrl").
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
 -behavior(gen_server).
@@ -34,12 +35,30 @@ init([LL, Name, R]) ->
             pending = sets:new(),
             vc = vectorclock:new()}}.
 
--spec handle_call({'rco_broadcast', bc_types:message()}, _, #state{deliver_to::pid(), self::atom(), pending::sets:set(_)}) -> {'reply', 'ok', #state{deliver_to::pid(), self::atom(), pending::sets:set(_)}}.
+-spec handle_call({'rco_broadcast', bc_types:message()}, _, #state{deliver_to::pid(), self::nonempty_string(), pending::sets:set(_)}) -> {'reply', 'ok', #state{deliver_to::pid(), self::nonempty_string(), pending::sets:set(_)}}.
 handle_call({rco_broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_delivered_event,
+		event_content = #bc_delivered_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	% broadcast to everyone
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_broadcast_event,
+		event_content = #bc_broadcast_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	% increment vectorclock
     OldVal = vectorclock:get(State#state.self, State#state.vc),
     NewVC = vectorclock:set(State#state.self, OldVal+1, State#state.vc),
@@ -71,6 +90,15 @@ deliver_pending(State, Pending, Vc) ->
             NewVc =
                 sets:fold(fun({Q, _, M}, VcA) ->
                              State#state.deliver_to ! {deliver, M},
+                            %%% OBS
+                            gen_event:sync_notify({global,om}, {process, #obs_process_event{
+                                process = State#state.self,
+                                event_type = bc_delivered_event,
+                                event_content = #bc_delivered_event{
+                                    message = M
+                                }
+                            }}),
+                            %%% SBO
                              % increment vector clock
                              OldVal = vectorclock:get(Q, VcA),
                              vectorclock:set(Q, OldVal+1,VcA)

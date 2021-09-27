@@ -19,8 +19,8 @@
 %%-type obs_sched_event() :: sched_event(). % wrong type, also record here
 
 -record(obs_process_event, {
-  process :: pid() | atom(),
-  event_type :: any(),
+  process :: pid() | atom() | nonempty_string(),
+  event_type :: atom(),
   event_content :: any()
 %%  the idea is to pattern-match on event_type (e.g. ra_log) and then have the same shape in event_content
 %%  for raft currently:
@@ -34,4 +34,12 @@
 
 -record(ra_log_event, {
 
+}).
+
+%% process-local broadcast events
+-record(bc_broadcast_event, { % newly broadcast message
+  message :: any() % the message
+}).
+-record(bc_delivered_event, { % newly delivered message
+  message :: any() % the message
 }).

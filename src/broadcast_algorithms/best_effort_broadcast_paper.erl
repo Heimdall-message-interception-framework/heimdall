@@ -1,6 +1,7 @@
 -module(best_effort_broadcast_paper).
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
+-include("../observables/observer_events.hrl").
 -behavior(gen_server).
 
 -export([start_link/3, broadcast/2]).
@@ -37,15 +38,43 @@ init([LL, Name, R]) ->
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
+	%%% OBS
+	Event = {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_delivered_event,
+		event_content = #bc_delivered_event{
+			message = Msg
+		}
+	}},
+    gen_event:sync_notify({global,om}, Event),
+	%%% SBO
 	% broadcast to everyone
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
 	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_broadcast_event,
+		event_content = #bc_broadcast_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	{reply, ok, State}.
 
 -spec handle_info({deliver, bc_types:message()}, _) -> {'noreply', _}.
 handle_info({deliver, Msg}, State) ->
 	State#state.deliver_to ! {deliver, Msg},
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_delivered_event,
+		event_content = #bc_delivered_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	{noreply, State};
 handle_info(Msg, State) ->
     io:format("[best_effort_bc_paper] received unknown message: ~p~n", [Msg]),

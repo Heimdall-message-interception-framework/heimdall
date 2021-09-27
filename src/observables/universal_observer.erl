@@ -31,6 +31,7 @@ handle_call(Msg, State) ->
     io:format("[univ_observer] received unhandled call: ~p~n", [Msg]),
     {ok, ok, State}.
 
+-spec add_to_history(#state{history_of_events::queue:queue(_)}, {'process', _} | {'sched', _}) -> #state{history_of_events::queue:queue(_)}.
 add_to_history(State, GeneralEvent) ->
-    NewHistory = queue:in(State#state.history_of_events, GeneralEvent),
+    NewHistory = queue:in(GeneralEvent, State#state.history_of_events),
     State#state{history_of_events = NewHistory}.

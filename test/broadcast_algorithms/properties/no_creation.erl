@@ -2,7 +2,7 @@
 %%% PROPERTY: If a correct process j delivers a message, then m was broadcast to j by some process i.
 -behaviour(gen_event).
 
--include("src/observables/observer_events.hrl").
+-include("include/observer_events.hrl").
 -include("src/broadcast_algorithms/bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).

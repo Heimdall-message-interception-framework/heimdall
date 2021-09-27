@@ -1,7 +1,7 @@
 -module(best_effort_broadcast_paper).
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
--include("../observables/observer_events.hrl").
+-include("include/observer_events.hrl").
 -include("bc_types.hrl").
 -behavior(gen_server).
 
@@ -62,6 +62,15 @@ handle_call({broadcast, Msg}, _From, State) ->
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
 	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_broadcast_event,
+		event_content = #bc_broadcast_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	{reply, ok, State}.
 
 -spec handle_info({deliver, bc_message()}, _) -> {'noreply', _}.

@@ -2,7 +2,7 @@
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
 -include("bc_types.hrl").
--include("../observables/observer_events.hrl").
+-include("include/observer_events.hrl").
 
 -behavior(gen_server).
 
@@ -50,7 +50,6 @@ handle_call({rco_broadcast, Msg}, _From, State) ->
  
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
-
 	% broadcast to everyone
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
 	%%% OBS

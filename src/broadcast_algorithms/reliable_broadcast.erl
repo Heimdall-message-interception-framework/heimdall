@@ -2,7 +2,7 @@
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
 -include("bc_types.hrl").
--include("../observables/observer_events.hrl").
+-include("include/observer_events.hrl").
 -behavior(gen_server).
 
 -export([start_link/3, broadcast/2]).
@@ -52,7 +52,6 @@ handle_call({broadcast, Msg}, _From, State) ->
 
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
-
 	% calculate new MaxId
 	Mids = lists:map(fun({_Pid, Mid}) -> Mid end, sets:to_list(State#state.local_delivered)),
 	Mid = lists:max([0|Mids]) + 2,

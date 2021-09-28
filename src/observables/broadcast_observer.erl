@@ -44,7 +44,7 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadc
 % handles delivered messages
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
     % add message to set of delivered messages
-    NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.broadcast_p, sets:new())),
+    NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
     % update delivered_p in state
     NewState = State#state{delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p)},
     PropertiesChecked = check_properties(NewState),
@@ -61,7 +61,7 @@ handle_event(Event, State) ->
 
 handle_call(Msg, State) ->
     io:format("[broadcast_observer] received unhandled call: ~p~n", [Msg]),
-    {ok, State}.
+    {ok, ok, State}.
 
 -spec add_to_history(#state{history_of_events::queue:queue(_)}, {'process', _} | {'sched', _}) -> #state{history_of_events::queue:queue(_)}.
 add_to_history(State, GeneralEvent) ->

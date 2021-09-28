@@ -24,18 +24,6 @@
   process :: process_identifier(),
   event_type :: atom(),
   event_content :: any()
-%%  the idea is to pattern-match on event_type (e.g. ra_log) and then have the same shape in event_content
-%%  for raft currently:
-%%    ra_log - {ra_log, {{pid, PId}, {idx, Idx}, {term, Term}, {trunc, Trunc}, {data, Data0}}}
-%%    ra_machine // need to distinguish to pattern-match
-%%               - {ra_machine, {{pid, self()}, {state_update, State, NewState}}}
-%%                 {ra_machine, {{pid, self()}, {reply, {{index, Index}, {term, Term}}}}}
-%%                 {ra_machine, {{pid, self()}, {side_effects, SideEffects}}}
-%%    gen_mi_statem - a lot on different state and data etc //currently not used anymore
-}).
-
--record(ra_log_event, {
-
 }).
 
 %% process-local broadcast events

@@ -1,6 +1,7 @@
 -module(reliable_broadcast).
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
+-include("bc_types.hrl").
 -include("../observables/observer_events.hrl").
 -behavior(gen_server).
 
@@ -22,7 +23,7 @@ start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_types:message()) -> any().
+-spec broadcast(bc_types:broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
 	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).
@@ -36,7 +37,7 @@ init([LL, Name, R]) ->
 		local_delivered = sets:new()
 	}}.
 
--spec handle_call({'broadcast', bc_types:message()}, _, #state{beb::pid(), deliver_to::pid(), self::nonempty_string(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}) -> {'reply', 'ok', #state{beb::pid(), deliver_to::pid(), self::nonempty_string(), max_mid::non_neg_integer(), local_delivered::sets:set(_)}}.
+-spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
@@ -68,7 +69,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 	NewDelivered = sets:add_element({State#state.self, Mid}, State#state.local_delivered),
 	{reply, ok, State#state{local_delivered = NewDelivered}}.
 
--spec handle_info({deliver, bc_types:message()}, _) -> {'noreply', _}.
+-spec handle_info({deliver, bc_message()}, #state{}) -> {'noreply', #state{}}.
 handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 	case sets:is_element({Sender, Mid}, State#state.local_delivered) of
 		true ->

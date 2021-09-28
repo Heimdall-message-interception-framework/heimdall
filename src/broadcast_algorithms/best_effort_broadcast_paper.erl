@@ -2,6 +2,7 @@
 %% best effort broadcast inspired by [Zeller2020](https://doi.org/10.1145/3406085.3409009)
 
 -include("../observables/observer_events.hrl").
+-include("bc_types.hrl").
 -behavior(gen_server).
 
 -export([start_link/3, broadcast/2]).
@@ -20,7 +21,7 @@ start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_types:message()) -> any().
+-spec broadcast(bc_types:broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
 	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).
@@ -34,7 +35,7 @@ init([LL, Name, R]) ->
 		self = unicode:characters_to_list([Name| "_be"])
 	}}.
 
--spec handle_call({'broadcast', bc_types:message()}, _, #state{link_layer::pid(), deliver_to::pid(), self::nonempty_string()}) -> {'reply', 'ok', #state{link_layer::pid(), deliver_to::pid(), self::nonempty_string()}}.
+-spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
@@ -63,7 +64,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 	%%% SBO
 	{reply, ok, State}.
 
--spec handle_info({deliver, bc_types:message()}, _) -> {'noreply', _}.
+-spec handle_info({deliver, bc_message()}, _) -> {'noreply', _}.
 handle_info({deliver, Msg}, State) ->
 	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS

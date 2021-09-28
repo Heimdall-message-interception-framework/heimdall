@@ -1,5 +1,4 @@
 -module(universal_observer).
-% a universal observer which tracks changes to every instrumented variable and message. Every change is logged to stdout.
 -behaviour(gen_event).
 
 -include("observer_events.hrl").

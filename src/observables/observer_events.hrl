@@ -18,8 +18,10 @@
 %% TODO: solve how to use record as types...
 %%-type obs_sched_event() :: sched_event(). % wrong type, also record here
 
+-type process_identifier() :: pid() | atom() | nonempty_string().
+
 -record(obs_process_event, {
-  process :: pid() | atom() | nonempty_string(),
+  process :: process_identifier(),
   event_type :: atom(),
   event_content :: any()
 %%  the idea is to pattern-match on event_type (e.g. ra_log) and then have the same shape in event_content

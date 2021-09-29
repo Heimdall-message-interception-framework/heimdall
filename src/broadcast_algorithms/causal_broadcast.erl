@@ -38,8 +38,6 @@ init([LL, Name, R]) ->
 
 -spec handle_call({'rco_broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({rco_broadcast, Msg}, _From, State) ->
-	% deliver locally
-	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
     gen_event:sync_notify({global,om}, {process, #obs_process_event{
 		process = State#state.self,
@@ -49,6 +47,10 @@ handle_call({rco_broadcast, Msg}, _From, State) ->
 		}
 	}}),
 	%%% SBO
+ 
+	% deliver locally
+	State#state.deliver_to ! {deliver, Msg},
+
 	% broadcast to everyone
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
 	%%% OBS

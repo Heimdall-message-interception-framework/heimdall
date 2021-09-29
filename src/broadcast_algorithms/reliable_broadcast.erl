@@ -39,8 +39,6 @@ init([LL, Name, R]) ->
 
 -spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
-	% deliver locally
-	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
 	Event = {process, #obs_process_event{
 		process = State#state.self,
@@ -51,6 +49,10 @@ handle_call({broadcast, Msg}, _From, State) ->
 	}},
     gen_event:sync_notify({global,om}, Event),
 	%%% SBO
+
+	% deliver locally
+	State#state.deliver_to ! {deliver, Msg},
+
 	% calculate new MaxId
 	Mids = lists:map(fun({_Pid, Mid}) -> Mid end, sets:to_list(State#state.local_delivered)),
 	Mid = lists:max([0|Mids]) + 2,

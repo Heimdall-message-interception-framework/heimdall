@@ -37,6 +37,15 @@ init([LL, Name, R]) ->
 
 -spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
+	%%% OBS
+    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+		process = State#state.self,
+		event_type = bc_broadcast_event,
+		event_content = #bc_broadcast_event{
+			message = Msg
+		}
+	}}),
+	%%% SBO
 	% deliver locally
 	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
@@ -53,15 +62,6 @@ handle_call({broadcast, Msg}, _From, State) ->
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
 	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
-	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
-		event_type = bc_broadcast_event,
-		event_content = #bc_broadcast_event{
-			message = Msg
-		}
-	}}),
-	%%% SBO
 	{reply, ok, State}.
 
 -spec handle_info({deliver, bc_message()}, _) -> {'noreply', _}.

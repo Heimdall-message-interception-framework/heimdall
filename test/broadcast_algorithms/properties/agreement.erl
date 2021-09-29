@@ -99,6 +99,12 @@ handle_call({get_validity, Proc}, State) ->
                     false
     end,
     {ok, Reply, State};
+handle_call(get_errors, State) ->
+    PrintErr = fun (err) ->
+        io:format("[agreement_prop] ERROR: Message ~p was delivered by processes ~p but not by ~p.")
+    end,
+    lists:foreach(PrintErr, State#state.errors),
+    {ok, State#state.errors, State};
 handle_call(Msg, State) ->
     io:format("[agreement_prop] received unhandled call: ~p~n", [Msg]),
     {ok, unhandled, State}.

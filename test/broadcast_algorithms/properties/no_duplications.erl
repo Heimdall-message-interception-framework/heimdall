@@ -1,4 +1,5 @@
 -module(no_duplications).
+%%% PROPERTY: No message is delivered more than once.
 -behaviour(gen_event).
 
 -include("src/observables/observer_events.hrl").
@@ -7,7 +8,7 @@
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 
 -record(state, {
-    armed = false :: boolean(), % if set to true, we send updates about our state
+    armed = false :: boolean(), % if set to true, we send updates about our state TODO: this needs to be implemented
     validity_p :: #{process_identifier() => boolean()},
     delivered_p :: #{process_identifier() => sets:set(bc_message())}
 }).
@@ -41,7 +42,7 @@ handle_event(Event, State) ->
     io:format("[no_duplications_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 
--spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() =>boolean()}, #state{}}.
+-spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.
 handle_call(get_validity, State) ->
     {ok, State#state.validity_p, State};
 handle_call({get_validity, Proc}, State) ->

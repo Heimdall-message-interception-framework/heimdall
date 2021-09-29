@@ -19,21 +19,13 @@ handle_event({process,
 %%    store event in history of events
     NewState = add_to_history(State, {process, ProcEvent}),
     case EvType of
-        ra_log ->
-            erlang:display("ra_log"),
-            erlang:display(EvContent);
-        ra_machine_state_update ->
-            erlang:display("ra machine state update"),
-            erlang:display(EvContent);
-        ra_machine_reply_write ->
-            erlang:display("ra machine reply write"),
-            erlang:display(EvContent);
-        ra_machine_reply_read ->
-            erlang:display("ra machine reply read"),
-            erlang:display(EvContent);
-        ra_machine_side_effects ->
-            erlang:display("ra machine side effects"),
-            erlang:display(EvContent);
+        ra_log -> ok;
+        ra_log_meta -> ok;
+        ra_machine_state_update -> ok;
+        ra_machine_reply_write -> ok;
+        ra_machine_reply_read -> ok;
+        ra_machine_side_effects -> ok;
+        ra_server_state_variable -> ok;
         _ -> erlang:display("unmatched event")
     end,
     {ok, NewState};

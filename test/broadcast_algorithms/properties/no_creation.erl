@@ -31,7 +31,7 @@ init(_) ->
 
 % handles delivered messages
 -spec handle_event(_, #state{}) -> {'ok', #state{}}.
-handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
+handle_event({process, #obs_process_event{process = _Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
     % add message to set of broadcast messages
     NewBroadcastMessages = sets:add_element(Msg, State#state.broadcast),
     {ok, State#state{

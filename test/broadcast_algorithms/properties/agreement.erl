@@ -78,7 +78,6 @@ init(_) ->
 % handles delivered messages
 -spec handle_event(_, #state{}) -> {'ok', #state{}}.
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
-    % check if message was already delivered
     % add message to set of delivered messages
     NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
 
@@ -100,8 +99,9 @@ handle_call({get_validity, Proc}, State) ->
     end,
     {ok, Reply, State};
 handle_call(get_errors, State) ->
-    PrintErr = fun (err) ->
-        io:format("[agreement_prop] ERROR: Message ~p was delivered by processes ~p but not by ~p.")
+    PrintErr = fun (Err) ->
+        io:format("[agreement_prop] ERROR: Message ~p was delivered by processes ~p but not by ~p.",
+        [Err#error.message, Err#error.delivered_by, Err#error.not_delivered_by])
     end,
     lists:foreach(PrintErr, State#state.errors),
     {ok, State#state.errors, State};

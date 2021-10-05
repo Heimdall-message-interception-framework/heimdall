@@ -31,5 +31,5 @@ handle_call(Msg, State) ->
     {ok, ok, State}.
 
 add_to_history(State, GeneralEvent) ->
-    NewHistory = queue:in(State#state.history_of_events, GeneralEvent),
+    NewHistory = queue:in(GeneralEvent, State#state.history_of_events),
     State#state{history_of_events = NewHistory}.

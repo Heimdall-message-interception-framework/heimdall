@@ -24,6 +24,8 @@ to be run on top level of the respective repo
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_non_mi_tests_SUITE.erl
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_mi_tests_SUITE.erl
     rebar3 ct --suite=test/broadcast_algorithms/broadcast_tests_SUITE.erl
+    rebar3 ct --suite=test/raft/raft_observer_tests_SUITE.erl
+
 
 `ra_kv_store`:
 

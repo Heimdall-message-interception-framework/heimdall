@@ -192,6 +192,8 @@ handle_event(Event, State) ->
 
 handle_call(get_result, #state{property_satisfied = PropSat} = State) ->
     {ok, PropSat, State};
+handle_call(get_length_history, #state{history_of_events = HistoryOfEvents} = State) ->
+    {ok, queue:len(HistoryOfEvents), State};
 handle_call(Msg, State) ->
     io:format("[raft_observer] received unhandled call: ~p~n", [Msg]),
     {ok, ok, State}.
@@ -200,7 +202,7 @@ add_to_history(State, GeneralEvent) ->
     NewHistory = queue:in(GeneralEvent, State#state.history_of_events),
     State#state{history_of_events = NewHistory}.
 
-update_prop_sat_and_notify(State, OldPropSat, NewPropSat, CanRecover, Armed, UpdateTarget) ->
+update_prop_sat_and_notify(State, OldPropSat, NewPropSat, _CanRecover, Armed, UpdateTarget) ->
     State1 = case OldPropSat == NewPropSat of % nothing changed
         true -> State;
         false ->

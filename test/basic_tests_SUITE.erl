@@ -6,7 +6,10 @@
 %%%-------------------------------------------------------------------
 -module(basic_tests_SUITE).
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 -include_lib("sched_event.hrl").
+
+-define(ObserverManager, {global, om}).
 
 -export([all/0,
   mil_naive_scheduler_test/1,
@@ -39,11 +42,15 @@ init_per_testcase(TestCase, Config) ->
   logger:add_handler(readable_handler, logger_std_h, ConfigReadable),
   {_, ConfigMachine} = logging_configs:get_config_for_machine(TestCase),
   logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
+%%  add observer
+  gen_event:add_handler(?ObserverManager, mil_observer_template, [self(), true, true]), % propsat, armed
   Config.
 
 end_per_testcase(_, Config) ->
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),
+%%  remove observer
+  gen_event:delete_handler(?ObserverManager, mil_observer_template, []),
   Config.
 
 mil_naive_scheduler_test(_Config) ->
@@ -71,7 +78,10 @@ mil_naive_scheduler_test(_Config) ->
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
   assert_equal(ReceivedMessages1, [10,9,8,7,6,5,4,3,2,1,0]),
-  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]).
+  assert_equal(ReceivedMessages2, [10,9,8,7,6,5,4,3,2,1,0]),
+%%  check the length of history
+  HistoryOfEvents = gen_event:call(?ObserverManager, mil_observer_template, get_length_history),
+  ?assert(HistoryOfEvents == 48).
 
 
 mil_naive_same_payload_scheduler_test(_Config) ->
@@ -99,7 +109,10 @@ mil_naive_same_payload_scheduler_test(_Config) ->
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
   ReceivedMessages2 = gen_server:call(DummyReceiver2, {get_received_payloads}),
   assert_equal(ReceivedMessages1, [1,1,1,1,1,1,1,1,1,1,1]),
-  assert_equal(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]).
+  assert_equal(ReceivedMessages2, [1,1,1,1,1,1,1,1,1,1,1]),
+%%  check the length of history
+  HistoryOfEvents = gen_event:call(?ObserverManager, mil_observer_template, get_length_history),
+  ?assert(HistoryOfEvents == 48).
 
 
 mil_drop_tests(_Config) ->
@@ -116,7 +129,10 @@ mil_drop_tests(_Config) ->
   timer:sleep(2500),
 %%  check the received messages
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]).
+  assert_equal(ReceivedMessages1, [10,9,8,7,6,4,3,2,1,0]),
+  %%  check the length of history
+  HistoryOfEvents = gen_event:call(?ObserverManager, mil_observer_template, get_length_history),
+  ?assert(HistoryOfEvents == 24).
 
 mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
@@ -132,7 +148,10 @@ mil_trans_crash_test(_Config) ->
   send_N_messages_with_interval(ds1, dr1, {10, 75}),
   timer:sleep(2500),
   ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-  assert_equal(ReceivedMessages1, [10,9,8]).
+  assert_equal(ReceivedMessages1, [10,9,8]),
+  %%  check the length of history
+  HistoryOfEvents = gen_event:call(?ObserverManager, mil_observer_template, get_length_history),
+  ?assert(HistoryOfEvents == 17).
 
 %%mil_duplicate_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased

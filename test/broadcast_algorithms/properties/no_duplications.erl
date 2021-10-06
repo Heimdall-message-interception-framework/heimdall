@@ -2,8 +2,8 @@
 %%% PROPERTY: No message is delivered more than once.
 -behaviour(gen_event).
 
--include("include/observer_events.hrl").
--include("src/broadcast_algorithms/bc_types.hrl").
+-include("observer_events.hrl").
+-include("../src/broadcast_algorithms/bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 

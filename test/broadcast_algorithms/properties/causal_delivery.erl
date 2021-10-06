@@ -3,8 +3,8 @@
 %%% which broadcast of m happens-before broadcast of m.
 -behaviour(gen_event).
 
--include("src/observables/observer_events.hrl").
--include("src/broadcast_algorithms/bc_types.hrl").
+-include("observer_events.hrl").
+-include("../src/broadcast_algorithms/bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 

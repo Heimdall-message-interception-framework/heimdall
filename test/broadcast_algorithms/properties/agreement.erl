@@ -2,8 +2,8 @@
 %%% PROPERTY: If a message m is delivered by some correct process i, then m is eventually delivered by every correct process j.
 -behaviour(gen_event).
 
--include("include/observer_events.hrl").
--include("src/broadcast_algorithms/bc_types.hrl").
+-include("observer_events.hrl").
+-include("../src/broadcast_algorithms/bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 

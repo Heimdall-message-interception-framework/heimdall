@@ -1,4 +1,4 @@
--module(raft_observer_template).
+-module(mil_observer_template).
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
@@ -26,7 +26,7 @@ init(_) ->
     init([undefined, true]).
 
 handle_event({process,
-              #obs_process_event{process = _Proc, event_type = EvType, event_content = _EvContent}} = ProcEvent,
+              #obs_process_event{process = _Proc, event_type = _EvType, event_content = _EvContent}} = ProcEvent,
               #state{property_satisfied = PropSat, armed = Armed, can_recover = CanRecover, update_target = UpdTarget} = State) ->
 %%    store event in history of events
     State1 = add_to_history(State, {process, ProcEvent}),
@@ -36,7 +36,7 @@ handle_event({process,
     {ok, State1};
 %%
 handle_event({sched,
-    #sched_event{what = enable_to_crash, id = _Id, from = _Proc, to = _Proc, mod = _Module, func = _Fun, args = _Args} = SchedEvent},
+    #sched_event{what = enable_to_crash, id = _Id, from = _Proc, to = _To, mod = _Module, func = _Fun, args = _Args} = SchedEvent},
     #state{property_satisfied = PropSat, armed = Armed, can_recover = CanRecover, update_target = UpdTarget} = State) ->
 %%    store event in history of events
     State1 = add_to_history(State, {sched, SchedEvent}),
@@ -46,7 +46,7 @@ handle_event({sched,
     {ok, State1};
 %%
 handle_event({sched,
-    #sched_event{what = enable_to, id = _TimerRef, from = _Proc, to = _Proc, mod = _Module, func = _Fun, args = _Args} = SchedEvent},
+    #sched_event{what = enable_to, id = _TimerRef, from = _Proc, to = _To, mod = _Module, func = _Fun, args = _Args} = SchedEvent},
     #state{property_satisfied = PropSat, armed = Armed, can_recover = CanRecover, update_target = UpdTarget} = State) ->
 %%    store event in history of events
     State1 = add_to_history(State, {sched, SchedEvent}),
@@ -56,7 +56,7 @@ handle_event({sched,
     {ok, State1};
 %%
 handle_event({sched,
-    #sched_event{what = disable_to, id = _TimerRef, from = _Proc, to = _Proc} = SchedEvent},
+    #sched_event{what = disable_to, id = _TimerRef, from = _Proc, to = _To} = SchedEvent},
     #state{property_satisfied = PropSat, armed = Armed, can_recover = CanRecover, update_target = UpdTarget} = State) ->
 %%    store event in history of events
     State1 = add_to_history(State, {sched, SchedEvent}),
@@ -66,7 +66,7 @@ handle_event({sched,
     {ok, State1};
 %%
 handle_event({sched,
-    #sched_event{what = fire_to, id = _TimerRef, from = _Proc, to = _Proc} = SchedEvent},
+    #sched_event{what = fire_to, id = _TimerRef, from = _Proc, to = _To} = SchedEvent},
     #state{property_satisfied = PropSat, armed = Armed, can_recover = CanRecover, update_target = UpdTarget} = State) ->
 %%    store event in history of events
     State1 = add_to_history(State, {sched, SchedEvent}),
@@ -205,12 +205,12 @@ update_prop_sat_and_notify(State, OldPropSat, NewPropSat, CanRecover, Armed, Upd
         true -> State;
         false ->
             % TODO: use CanRecover (also whether to change)
-            State1 = State#state{property_satisfied = NewPropSat},
+            State2 = State#state{property_satisfied = NewPropSat},
             % notify about change if armed
             case Armed of
                 true -> UpdateTarget ! {property_sat_changed, NewPropSat};
                 false -> ok
             end,
-            State1
+            State2
     end,
     State1.

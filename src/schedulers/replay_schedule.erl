@@ -5,7 +5,7 @@
 %%% @end
 %%%-------------------------------------------------------------------
 -module(replay_schedule).
--include_lib("../sched_event.hrl").
+-include_lib("sched_event.hrl").
 
 -behaviour(gen_server).
 

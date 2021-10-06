@@ -9,8 +9,12 @@
 -module(msg_interception_helpers).
 -author("fms").
 
+-include("observer_events.hrl").
+
+-define(ObserverManager, {global, om}).
+
 %% API
--export([get_readable_time/0, remove_firstmatch/2, get_message_interception_layer/0]).
+-export([get_readable_time/0, remove_firstmatch/2, get_message_interception_layer/0, submit_sched_event/1]).
 
 get_message_interception_layer() ->
   MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
@@ -18,6 +22,10 @@ get_message_interception_layer() ->
       undefined -> erlang:throw("no message interception layer registered");
       _ -> MIL
   end.
+
+submit_sched_event(Event) ->
+  gen_event:sync_notify(?ObserverManager, {sched, Event}).
+
 
   - spec get_readable_time() -> [char()].
 get_readable_time() ->

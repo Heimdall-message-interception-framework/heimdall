@@ -6,7 +6,7 @@
 %%%-------------------------------------------------------------------
 -module(basic_tests_SUITE).
 -include_lib("common_test/include/ct.hrl").
--include_lib("../src/sched_event.hrl").
+-include_lib("sched_event.hrl").
 
 -export([all/0,
   mil_naive_scheduler_test/1,
@@ -27,6 +27,8 @@ all() -> [
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
+  % create observer manager
+  {ok, _} = gen_event:start({global, om}),
   Config.
 
 end_per_suite(_Config) ->

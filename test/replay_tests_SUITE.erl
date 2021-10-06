@@ -10,7 +10,7 @@
 -author("fms").
 
 -include_lib("common_test/include/ct.hrl").
--include_lib("../src/sched_event.hrl").
+-include_lib("sched_event.hrl").
 
 %% API
 -export([all/0, init_per_suite/1, end_per_suite/1, init_per_testcase/2, end_per_testcase/2, small_test/1,
@@ -26,6 +26,8 @@ all() -> [
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
+  % create observer manager
+  {ok, _} = gen_event:start({global, om}),
   Config.
 
 end_per_suite(_Config) ->

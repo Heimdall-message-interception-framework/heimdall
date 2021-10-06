@@ -139,25 +139,33 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
   case Bool_crashed of
     true ->
 %%      still log this event for matching later on
-      logger:info("enable_to_crsh", #{what => enable_to_crsh, id => State#state.id_counter,
-        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+%%      logger:info("enable_to_crsh", #{what => enable_to_crsh, id => State#state.id_counter,
+%%        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+      SchedEvent = #sched_event{what = enable_to_crsh, id = State#state.id_counter,
+        from = Proc, to = Proc, mod = Module, func = Fun, args = Args},
+      msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {reply, TimerRef, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
     _ ->
       OrddictToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
       UpdatedOrddict = orddict:append(TimerRef, {Time, Module, Fun, Args}, OrddictToUpdate),
       UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedOrddict, State#state.enabled_timeouts),
-      logger:info("enable_to", #{what => enable_to, id => TimerRef,
-        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
-%%      erlang:display(["enable_to", "MsgRef", MsgRef, "From", Proc, "To", Proc, "Mod", Module, "Func", Fun, "Args", Args]),
+%%      logger:info("enable_to", #{what => enable_to, id => TimerRef,
+%%        from => Proc, to => Proc, mod => Module, func => Fun, args => Args}),
+      SchedEvent = #sched_event{what = enable_to, id = TimerRef,
+        from = Proc, to = Proc, mod = Module, func = Fun, args = Args},
+      msg_interception_helpers:submit_sched_event(SchedEvent),
       {reply, TimerRef, State#state{enabled_timeouts = UpdatedEnabledTimeouts}}
   end;
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
   Proc = pid_to_node(State, ProcPid),
   {_TimeoutValue, NewEnabledTimeouts} = find_enabled_timeouts_and_get_updated_ones_in_transit(State, Proc, TimerRef),
 %%  erlang:display(["disable_to", "Id", TimerRef, "From", Proc, "To", Proc]),
-  logger:info("disable_to", #{what => disable_to, id => TimerRef,
-    from => Proc, to => Proc}),
+%%  logger:info("disable_to", #{what => disable_to, id => TimerRef,
+%%    from => Proc, to => Proc}),
+  SchedEvent = #sched_event{what = disable_to, id = TimerRef,
+    from = Proc, to = Proc},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
 handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
 %%  Proc = pid_to_node(State, ProcPid),
@@ -166,8 +174,11 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
   [{_Time, Mod, Func, Args}] = TimeoutValue,
 %%  erlang:display(["Mod", Mod, "Func", Func, "Args", Args]),
   erlang:apply(Mod, Func, Args),
-  logger:info("fire_to", #{what => fire_to, id => TimerRef,
-    from => Proc, to => Proc}),
+%%  logger:info("fire_to", #{what => fire_to, id => TimerRef,
+%%    from => Proc, to => Proc}),
+  SchedEvent = #sched_event{what = fire_to, id = TimerRef,
+    from = Proc, to = Proc},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts}};
 handle_call({poll_to}, _From, State = #state{}) ->
 %%  erlang:display(["poll_to"]),
@@ -191,7 +202,9 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.commands_in_transit, CmdOrddictNewQueues),
   NewTimeoutList = orddict:store(NodeName, orddict:new(), State#state.enabled_timeouts),
-  logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
+%%  logger:info("registration", #{what => reg_node, name => NodeName, class => NodeClass}),
+  SchedEvent = #sched_event{what = reg_node, name = NodeName, class = NodeClass},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid,
                         registered_pid_nodes = NewRegisteredPidNodes,
                         commands_in_transit = NewCommandStore,
@@ -200,7 +213,9 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
 handle_cast({register_client, {ClientName}}, State = #state{}) ->
   {ok, Pid} = client_node:start(ClientName, self()),
   NewClientDict = orddict:store(ClientName, Pid, State#state.client_nodes),
-  logger:info("regst_client", #{what => reg_clnt, name => ClientName}),
+%%  logger:info("regst_client", #{what => reg_clnt, name => ClientName}),
+  SchedEvent = #sched_event{what = reg_clnt, name = ClientName},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{client_nodes = NewClientDict}};
 %%
 handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
@@ -215,8 +230,11 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
   if
     Bool_crashed ->
 %%      still log this event for matching later on
-      logger:info("cmd_rcv_crsh", #{what => cmd_rcv_crsh, id => State#state.id_counter,
-                                    from => From, to => To, mod => Module, func => Fun, args => Args}),
+%%      logger:info("cmd_rcv_crsh", #{what => cmd_rcv_crsh, id => State#state.id_counter,
+%%                                    from => From, to => To, mod => Module, func => Fun, args => Args}),
+      SchedEvent = #sched_event{what = cmd_rcv_crsh, id = State#state.id_counter,
+        from = From, to = To, mod = Module, func = Fun, args = Args},
+      msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
     Bool_whitelisted -> do_exec_cmd(Module, Fun, Args),
@@ -227,8 +245,11 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
       UpdatedCommandsInTransit = orddict:store({From, To}, UpdatedQueue, State#state.commands_in_transit),
       UpdatedNewCommandsInTransit = State#state.new_commands_in_transit ++
                                     [{State#state.id_counter, From, To, Module, Fun, Args}],
-      logger:info("cmd_rcv", #{what => cmd_rcv, id => State#state.id_counter,
-                                from => From, to => To, mod => Module, func => Fun, args => Args}),
+%%      logger:info("cmd_rcv", #{what => cmd_rcv, id => State#state.id_counter,
+%%                                from => From, to => To, mod => Module, func => Fun, args => Args}),
+      SchedEvent = #sched_event{what = cmd_rcv, id = State#state.id_counter,
+        from = From, to = To, mod = Module, func = Fun, args = Args},
+      msg_interception_helpers:submit_sched_event(SchedEvent),
 %%      erlang:display(["cmd_rcv", "Id", State#state.id_counter, "From", From, "To", To, "Mod", Module, "Func", Fun, "Args", Args]),
       NextID = State#state.id_counter + 1,
       {noreply, State#state{commands_in_transit = UpdatedCommandsInTransit,
@@ -240,9 +261,13 @@ handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{
   {Mod, Func, Args, Skipped, NewCommandStore} = find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, Args),
 %%  erlang:display(["exec_msg_cmd", "Id", Id, "From", From, "To", To, "Mod", Mod, "Func", Func, "Args", Args]),
-  logger:info("exec_msg_cmd", #{what => exec_msg_cmd, id => Id,
-                                from => From, to => To, skipped => Skipped,
-                                mod => Mod, func => Func, args => Args}),
+%%  logger:info("exec_msg_cmd", #{what => exec_msg_cmd, id => Id,
+%%                                from => From, to => To, skipped => Skipped,
+%%                                mod => Mod, func => Func, args => Args}),
+  SchedEvent = #sched_event{what = exec_msg_cmd, id = Id,
+    from = From, to = To, skipped = Skipped,
+    mod = Mod, func = Func, args = Args},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
 %% TODO: change to "wait for new events" or similiar
@@ -254,8 +279,11 @@ handle_cast({duplicate, {Id, From, To}}, State = #state{}) ->
   {Mod, Func, Args, Skipped, _NewCommandStore} =
       find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, Args),
-  logger:info("duplicat", #{what => duplicat, id => Id, from => From, to => To,
-                            mod => Mod, func => Func, args => Args, skipped => Skipped}),
+%%  logger:info("duplicat", #{what => duplicat, id => Id, from => From, to => To,
+%%                            mod => Mod, func => Func, args => Args, skipped => Skipped}),
+  SchedEvent = #sched_event{what = duplicat, id = Id, from = From, to = To,
+                            mod = Mod, func = Func, args = Args, skipped = Skipped},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
 %%  we do not update state since we duplicate
   {noreply, State};
 %%
@@ -264,20 +292,26 @@ handle_cast({send_altered, {Id, From, To, NewArgs}}, State = #state{}) ->
     find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, NewArgs),
 %%  TODO: update the commands
-  logger:info("snd_altr", #{what => snd_altr, id => Id, from => From, to => To,
-                            mod => Mod, func => Func, args => NewArgs, skipped => Skipped}),
+%%  logger:info("snd_altr", #{what => snd_altr, id => Id, from => From, to => To,
+%%                            mod => Mod, func => Func, args => NewArgs, skipped => Skipped}),
+  SchedEvent = #sched_event{what = snd_altr, id = Id, from = From, to = To,
+    mod = Mod, func = Func, args = NewArgs, skipped = Skipped},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
 handle_cast({drop, {Id, From, To}}, State = #state{}) ->
   {Mod, Func, Args, Skipped, NewCommandStore} =
     find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
-  logger:info("drop_msg", #{what => drop_msg, id => Id, from => From, to => To, mod => Mod, func => Func, args => Args, skipped => Skipped}),
+%%  logger:info("drop_msg", #{what => drop_msg, id => Id, from => From, to => To, mod => Mod, func => Func, args => Args, skipped => Skipped}),
+  SchedEvent = #sched_event{what = drop_msg, id = Id, from = From, to = To, mod = Mod, func = Func, args = Args, skipped = Skipped},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
 %% removed client requests for the time being
 %%handle_cast({client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
 %%  gen_server:cast(client_pid(State, ClientName), {client_req, ClientName, Coordinator, ClientCmd}),
 %%  logger:info("clnt_req", #{what => clnt_req, from => ClientName, to => Coordinator, mesg => ClientCmd}),
+%%  if we add this, submit SchedEvent
 %%  {noreply, State};
 %%
 %%handle_cast({fwd_client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
@@ -292,13 +326,17 @@ handle_cast({crash_trans, {NodeName}}, State = #state{}) ->
               State#state.commands_in_transit,
               ListQueuesToEmpty),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
-  logger:info("trans_crs", #{what => trns_crs, name => NodeName}),
+%%  logger:info("trans_crs", #{what => trns_crs, name => NodeName}),
+  SchedEvent = #sched_event{what = trns_crs, name = NodeName},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, commands_in_transit = NewCommandsStore}};
 %%
 handle_cast({rejoin, {NodeName}}, State = #state{}) ->
 %%  for transient crashes only
   UpdatedCrashTrans = sets:del_element(NodeName, State#state.transient_crashed_nodes),
-  logger:info("rejoin", #{what => rejoin, name => NodeName}),
+%%  logger:info("rejoin", #{what => rejoin, name => NodeName}),
+  SchedEvent = #sched_event{what = rejoin, name = NodeName},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans}};
 handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
 %%  for now, we keep the outgoing channels since these are messages that were sent before (still scheduable)
@@ -308,7 +346,9 @@ handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
     State#state.commands_in_transit,
     ListQueuesToDelete),
 %%  in order to let a schedule replay, we do not need to log all the dropped messages due to crashes
-  logger:info("perm_crsh", #{what => perm_crs, name => NodeName}),
+%%  logger:info("perm_crsh", #{what => perm_crs, name => NodeName}),
+  SchedEvent = #sched_event{what = perm_crs, name = NodeName},
+  msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm, commands_in_transit = NewCommandStore}};
 %%
 handle_cast(Msg, State) ->

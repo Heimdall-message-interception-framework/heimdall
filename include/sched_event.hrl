@@ -28,5 +28,6 @@
                   skipped = undefined :: list(number()) | undefined,
                   mod = undefined :: atom() | undefined,
                   func = undefined :: atom() | undefined,
-                  args = undefined :: list(any()) | undefined
+                  args = undefined :: list(any()) | undefined,
+                  timerref = undefined :: reference() | undefined
 }).

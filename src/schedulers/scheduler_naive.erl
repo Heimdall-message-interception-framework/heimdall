@@ -105,7 +105,7 @@ next_event_and_state(State) ->
 
 poll_and_schedule_timeouts(MIL) ->
 %%  type of EnabledTimeouts: orddict ( procs => orddict ( timerref => value ) )
-    EnabledTimeouts = message_interception_layer:poll_timeouts(MIL),
+    EnabledTimeouts = message_interception_layer:get_timeouts(MIL),
 %%    just pick the first one for now
     FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
     ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),

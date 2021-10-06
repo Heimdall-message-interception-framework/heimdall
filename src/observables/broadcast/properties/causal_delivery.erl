@@ -4,7 +4,8 @@
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
--include("../src/broadcast_algorithms/bc_types.hrl").
+-include("sched_event.hrl").
+-include("src/broadcast_algorithms/bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 
@@ -31,7 +32,6 @@ check_causal_delivery(Msg, Proc, State) ->
         maps:keys(State#state.vc_m)),
 
     % check that they have already been delivered
-    DeliveredMessages = sets:from_list(maps:get(Proc, State#state.delivered_p, [])),
     AllDelivered = lists:foldl(
         fun(M, Acc) -> Acc and sets:is_element(M, DeliveredMessages) end,
         true, HBMessages),
@@ -47,7 +47,6 @@ init(_) ->
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
     % calculate vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
-    NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, OldVC),
 
     % update vc of process and set vc of message
     {ok, State#state{
@@ -56,19 +55,14 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadc
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
     % add message to set of delivered messages
     NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
-
     % update vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
-    NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, OldVC),
-
+    
     % check causal delivery property
     {ok, check_causal_delivery(Msg, Proc, 
         State#state{
             delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p),
-            vc_p = maps:put(Proc, NewVC, State#state.vc_p)})};
 % TODO: handle message receive events and update vc of receiving process with the vc of the sender
-handle_event(Event, State) ->
-    io:format("[causal_delivery_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.

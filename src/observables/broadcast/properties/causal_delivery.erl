@@ -23,6 +23,7 @@
 %% property functions
 -spec check_causal_delivery(bc_message(), process_identifier(), #state{}) -> #state{}.
 check_causal_delivery(Msg, Proc, State) ->
+    % get the vc of the broadcast message
     MsgVC = maps:get(Msg, State#state.vc_m),
 
     % get all messages that happened before
@@ -32,6 +33,7 @@ check_causal_delivery(Msg, Proc, State) ->
         maps:keys(State#state.vc_m)),
 
     % check that they have already been delivered
+    DeliveredMessages = maps:get(Proc, State#state.delivered_p, sets:new()),
     AllDelivered = lists:foldl(
         fun(M, Acc) -> Acc and sets:is_element(M, DeliveredMessages) end,
         true, HBMessages),
@@ -45,24 +47,51 @@ init(_) ->
 % handles delivered messages
 -spec handle_event(_, #state{}) -> {'ok', #state{}}.
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
+    io:format("Received broadcast event: ~p, ~p", [Proc,Msg]),
     % calculate vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
+    NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
+    io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
 
     % update vc of process and set vc of message
     {ok, State#state{
             vc_p = maps:put(Proc, NewVC, State#state.vc_p),
             vc_m = maps:put(Msg, NewVC, State#state.vc_m)}};
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
+    io:format("Received delivered event: ~p, ~p", [Proc,Msg]),
     % add message to set of delivered messages
     NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
     % update vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
+    NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
+    io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
+
+    % get or update vectorclock of the delivered message
+    MsgVC = maps:get(Msg, State#state.vc_m, NewVC),
     
     % check causal delivery property
     {ok, check_causal_delivery(Msg, Proc, 
         State#state{
             delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p),
-% TODO: handle message receive events and update vc of receiving process with the vc of the sender
+            vc_p = maps:put(Proc, NewVC, State#state.vc_p),
+            vc_m = maps:put(Msg, MsgVC, State#state.vc_m)})};
+handle_event({sched, #sched_event{what = exec_msg_cmd, from = From, to = To}}, State) ->
+    % io:format("[causal_delivery_prop] Received msg_event, from: ~p, to: ~p",
+    %     [From, To]),
+    % To receives a message from From -> update From's vectorclock
+    SenderVC = maps:get(From, State#state.vc_p, vectorclock:new()),
+    ReceiverVC = maps:get(To, State#state.vc_p, vectorclock:new()),
+    NewVC = vectorclock:update_with(To, fun(X) -> X+1 end, 0,
+        vectorclock:max([SenderVC, ReceiverVC])),
+    
+    % io:format("[causal_delivery_prop] SenderVC: ~p, ReceiverVC: ~p, NewVC: ~p", [SenderVC,ReceiverVC, NewVC]),
+
+
+    {ok, State#state{
+        vc_p = maps:put(To, NewVC, State#state.vc_p)
+    }};
+handle_event(_Event, State) ->
+    % ignore unhandled events
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.

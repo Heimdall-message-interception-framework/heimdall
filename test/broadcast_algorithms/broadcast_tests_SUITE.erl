@@ -25,7 +25,8 @@ groups() -> [
 
 init_per_group(rco_tests, Config) ->
     % register broadcast observer
-    gen_event:add_handler({global, om}, broadcast_observer, []),
+    % gen_event:add_handler({global, om}, broadcast_observer, []),
+    gen_event:add_handler({global, om}, causal_delivery, []),
     [{broadcast, causal_broadcast} | Config];
 init_per_group(rb_tests, Config) ->
     % register broadcast observer

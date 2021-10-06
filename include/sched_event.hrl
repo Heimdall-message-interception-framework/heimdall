@@ -10,7 +10,7 @@
 
 -type sched_event_type() :: reg_node | reg_clnt
                           | cmd_rcv | cmd_rcv_crsh | exec_msg_cmd
-                          | enable_to | enable_to_crsh | disable_to
+                          | enable_to | enable_to_crsh | disable_to % to = timeout
                           | duplicat | snd_altr | drop_msg
                           | trns_crs | rejoin | perm_crs.
 

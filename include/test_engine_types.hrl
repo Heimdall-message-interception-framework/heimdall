@@ -1,19 +1,20 @@
 -record(instruction, {
-    module :: atom(),
+    module :: atom(), % either message_interception_layer or SUT
     function :: atom(),
     args :: [any()]
 }
 ).
 
--type history() :: [{#instruction{}, #state{}}].
-
 -record(state, {
     properties :: #{atom() => boolean()},
-    commands_in_transit :: [command()],
-    timeouts :: [timeout()],
-    nodes :: [process_identifier()],
-    crashed :: [process_identifier()]
+    commands_in_transit :: [any()], % should have command type
+    timeouts :: [any()], % timeout, assumed that is a tuple of {Proc, TimerRef, etc.} see MIL
+    nodes :: [any()], % process_identifier
+    crashed :: [any()] % process_identifier
 }).
 
-% -spec choose_instruction([instruction()], [instruction()], history()) -> instruction()
-% choose_instruction(SUT_Instructions, Sched_Instructions, History) -> Instruction
+-type history() :: [{#instruction{}, #state{}}].
+
+
+% -spec choose_instruction(any(), [instruction()], [instruction()], history()) -> instruction()
+% choose_instruction(MIL, SUT_Instructions, Sched_Instructions, History) -> Instruction

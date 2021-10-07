@@ -32,7 +32,7 @@
   list_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
   new_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
   enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(),
-                                                      orddict:orddict({TimerRef::reference(), {Time::any(), Module::pid(), Function::atom(), ListArgs::list(any())}})),
+                                                      orddict:orddict({TimerRef::reference(), {Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}})),
 %%  scheduler_id is only used to send the new_events, we could also request these with the scheduler
   scheduler_id :: pid(),
   id_counter = 0 :: any()
@@ -41,6 +41,7 @@
 %%%===================================================================
 %%% Functions for External Use
 %%%===================================================================
+%% TODO: distinguish into functions called from SUT and the scheduling engine
 
 start_msg_int_layer(MIL) ->
 %%  add new ets table
@@ -63,8 +64,12 @@ msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
 msg_command(MIL, From, To, Module, Fun, Args) ->
   gen_server:cast(MIL, {msg_cmd, {From, To, Module, Fun, Args}}).
 
-exec_msg_command(MIL, ID, From, To, Module, Fun, Args) ->
-  gen_server:cast(MIL, {exec_msg_cmd, {ID, From, To, Module, Fun, Args}}).
+%% deprecated, use the one with 4 parameters
+exec_msg_command(MIL, ID, From, To, _Module, _Fun, _Args) ->
+  exec_msg_command(MIL, ID, From, To).
+
+exec_msg_command(MIL, ID, From, To) ->
+  gen_server:cast(MIL, {exec_msg_cmd, {ID, From, To}}).
 
 duplicate_msg_command(MIL, ID, From, To) ->
   gen_server:cast(MIL, {duplicate, {ID, From, To}}).
@@ -287,7 +292,7 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
         id_counter = NextID}}
   end;
 %%
-handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{}) ->
+handle_cast({exec_msg_cmd, {Id, From, To}}, State = #state{}) ->
   {Mod, Func, Args, Skipped, NewCommandStore} = find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, Args),
 %%  erlang:display(["exec_msg_cmd", "Id", Id, "From", From, "To", To, "Mod", Mod, "Func", Func, "Args", Args]),
@@ -300,7 +305,7 @@ handle_cast({exec_msg_cmd, {Id, From, To, _Module, _Fun, Args}}, State = #state{
   msg_interception_helpers:submit_sched_event(SchedEvent),
   {noreply, State#state{commands_in_transit = NewCommandStore}};
 %%
-%% TODO: change to "wait for new events" or similiar
+%% TODO: change to "wait for new events" or similar
 handle_cast({noop, {}}, State = #state{}) ->
 %%  erlang:display("reach noop"),
   {noreply, State};

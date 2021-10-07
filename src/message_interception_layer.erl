@@ -144,18 +144,31 @@ get_permanent_crashed_nodes(MIL) ->
 start(Scheduler) ->
   gen_server:start_link(?MODULE, [Scheduler], []).
 
+-spec(init(Args :: term()) ->
+  {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term()} | ignore).
 init([Scheduler]) ->
   {ok, #state{scheduler_id = Scheduler}}.
 
-handle_call({get_permanent_crashed_nodes}, #state{permanent_crashed_nodes = PermanentCrashedNodes} = State, _From) ->
+-spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
+    State :: #state{}) ->
+  {reply, Reply :: term(), NewState :: #state{}} |
+  {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
+  {noreply, NewState :: #state{}} |
+  {noreply, NewState :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
+  {stop, Reason :: term(), NewState :: #state{}}).
+handle_call({get_permanent_crashed_nodes}, _From, #state{permanent_crashed_nodes = PermanentCrashedNodes} = State) ->
   {reply, PermanentCrashedNodes, State};
-handle_call({get_transient_crashed_nodes}, #state{transient_crashed_nodes = TransientCrashedNodes} = State, _From) ->
+handle_call({get_transient_crashed_nodes}, _From, #state{transient_crashed_nodes = TransientCrashedNodes} = State) ->
   {reply, TransientCrashedNodes, State};
-handle_call({get_all_node_names}, #state{} = State, _From) ->
+handle_call({get_all_node_names}, _From, #state{} = State) ->
   NodeNames = get_all_node_names_from_state(State),
   {reply, NodeNames, State};
-handle_call({get_commands_in_transit}, #state{list_commands_in_transit = CommandsInTransit} = State, _From) ->
-  {reply, CommandsInTransit, State};
+handle_call({get_commands}, _From, State = #state{}) ->
+  {reply, State#state.list_commands_in_transit, State};
+%%handle_call({get_commands}, #state{list_commands_in_transit = CommandsInTransit} = State, _From) ->
+%%  {reply, CommandsInTransit, State};
 handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, MsgContent}]}}, _From,
     State = #state{})
   when not is_tuple(ProcPid)->
@@ -213,9 +226,13 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
 handle_call({get_timeouts}, _From, State = #state{}) ->
   {reply, State#state.enabled_timeouts, State};
 handle_call(_Request, _From, State) ->
-  erlang:throw("unhandled call"),
+  erlang:throw(["unhandled call", _Request]),
   {reply, ok, State}.
 
+-spec(handle_cast(Request :: term(), State :: #state{}) ->
+  {noreply, NewState :: #state{}} |
+  {noreply, NewState :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #state{}}).
 handle_cast({start}, State) ->
   erlang:send_after(?INTERVAL, self(), trigger_get_events),
   {noreply, State};
@@ -303,7 +320,8 @@ handle_cast({exec_msg_cmd, {Id, From, To}}, State = #state{}) ->
     from = From, to = To, skipped = Skipped,
     mod = Mod, func = Func, args = Args},
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{commands_in_transit = NewCommandStore}};
+  NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
+  {noreply, State#state{commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
 %% TODO: change to "wait for new events" or similar
 handle_cast({noop, {}}, State = #state{}) ->
@@ -340,7 +358,8 @@ handle_cast({drop, {Id, From, To}}, State = #state{}) ->
 %%  logger:info("drop_msg", #{what => drop_msg, id => Id, from => From, to => To, mod => Mod, func => Func, args => Args, skipped => Skipped}),
   SchedEvent = #sched_event{what = drop_msg, id = Id, from = From, to = To, mod = Mod, func = Func, args = Args, skipped = Skipped},
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{commands_in_transit = NewCommandStore}};
+  NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
+  {noreply, State#state{commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
 %% removed client requests for the time being
 %%handle_cast({client_req, {ClientName, Coordinator, ClientCmd}}, State = #state{}) ->
@@ -398,6 +417,10 @@ handle_cast(Msg, State) ->
   {noreply, State}.
 
 
+-spec(handle_info(Info :: timeout() | term(), State :: #state{}) ->
+  {noreply, NewState :: #state{}} |
+  {noreply, NewState :: #state{}, timeout() | hibernate} |
+  {stop, Reason :: term(), NewState :: #state{}}).
 handle_info(trigger_get_events, State = #state{}) ->
   gen_server:cast(State#state.scheduler_id, {new_events, State#state.new_commands_in_transit}),
   restart_timer(),

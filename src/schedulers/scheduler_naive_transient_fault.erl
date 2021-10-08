@@ -8,7 +8,7 @@
 
 -behaviour(gen_server).
 
--export([start/0, send_next_scheduling_instr/1, register_msg_int_layer/2]).
+-export([start/1, send_next_scheduling_instr/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -17,7 +17,8 @@
 
 -record(state, {
   message_interception_layer_id :: pid() | undefined,
-  commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}]
+  commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
+  already_crashed = false :: boolean()
 }).
 
 %%%===================================================================
@@ -27,27 +28,23 @@
 send_next_scheduling_instr(Scheduler) ->
   gen_server:cast(Scheduler, {send_next_sched}).
 
-register_msg_int_layer(Scheduler, MIL) ->
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}).
-
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start(MIL) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL], []).
 
-init([]) ->
-  {ok, #state{}}.
+init([MIL]) ->
+  {ok, #state{message_interception_layer_id = MIL}}.
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
 
-handle_cast({new_events, ListNewCommands}, State = #state{}) ->
-  UpdatedCommands = State#state.commands_in_transit ++ ListNewCommands,
+handle_cast({commands_it, ListCommands}, State = #state{}) ->
   send_next_scheduling_instr(self()), % react to new events with new scheduled events
-  {noreply, State#state{commands_in_transit = UpdatedCommands}};
+  {noreply, State#state{commands_in_transit = ListCommands}};
 handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}};
 handle_cast({send_next_sched}, State = #state{}) ->
@@ -82,11 +79,12 @@ next_event_and_state(State) ->
   case State#state.commands_in_transit of
     [] -> {State, {noop, {}}} ;
     [{ID,F,T,Mod,Func,Args} | Tail] ->
-      case Args of
-        [_, {message, 7}] ->
+      case {State#state.already_crashed, Args} of
+        {false, [_, {message, 7}]} ->
           FilteredCommands = lists:filter(fun({_,{_,To,_,_,_}}) -> To /= T end, Tail),
-          {State#state{commands_in_transit = FilteredCommands}, {crash_trans, T}};
-        _ -> {State#state{commands_in_transit = Tail}, {ID,F,T,Mod,Func,Args}}
+          {State#state{commands_in_transit = FilteredCommands, already_crashed = true}, {crash_trans, T}};
+        {false, _} -> {State#state{commands_in_transit = Tail}, {ID,F,T,Mod,Func,Args}};
+        {true, _} -> {State, {noop, {}}}
       end
   end.
 

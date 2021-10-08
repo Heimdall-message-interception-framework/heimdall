@@ -21,9 +21,9 @@
   assert_equal/2]).
 
 all() -> [
-          mil_naive_scheduler_test,
-          mil_naive_same_payload_scheduler_test,
-          mil_drop_tests,
+%%          mil_naive_scheduler_test,
+%%          mil_naive_same_payload_scheduler_test,
+%%          mil_drop_tests,
           mil_trans_crash_test
 %%          mil_duplicate_test % TODO: add one
          ].
@@ -54,10 +54,10 @@ end_per_testcase(_, Config) ->
   Config.
 
 mil_naive_scheduler_test(_Config) ->
-%%  initiate Scheduler and MIL
-  {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_naive:register_msg_int_layer(Scheduler, MIL),
+%%  initiate Scheduler, MIL and ETH
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
 %%  start and register dummy senders and receivers
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   {ok, DummySender2} = dummy_sender:start(ds2, MIL),
@@ -67,8 +67,8 @@ mil_naive_scheduler_test(_Config) ->
   message_interception_layer:register_with_name(MIL, ds2, DummySender2, dummy_sender),
   message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
   message_interception_layer:register_with_name(MIL, dr2, DummyReceiver2, dummy_receiver),
-%%  start the MIL
-  message_interception_layer:start_msg_int_layer(MIL),
+%%  start the CTH
+  commands_transfer_helper:start(CTH),
 %%  send the messages
   timer:sleep(100), % wait first a bit so that logging is in sync
   send_N_messages_with_interval(ds1, dr1, {10, 75}),
@@ -85,10 +85,10 @@ mil_naive_scheduler_test(_Config) ->
 
 
 mil_naive_same_payload_scheduler_test(_Config) ->
-%%  initiate Scheduler and MIL
-  {ok, Scheduler} = scheduler_naive_same_payload:start(1),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_naive_same_payload:register_msg_int_layer(Scheduler, MIL),
+%%  initiate Scheduler, MIL and ETH
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive_same_payload:start(MIL, 1),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
 %%  start and register dummy senders and receivers
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   {ok, DummySender2} = dummy_sender:start(ds2, MIL),
@@ -98,8 +98,8 @@ mil_naive_same_payload_scheduler_test(_Config) ->
   message_interception_layer:register_with_name(MIL, ds2, DummySender2, dummy_sender),
   message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
   message_interception_layer:register_with_name(MIL, dr2, DummyReceiver2, dummy_receiver),
-%%  start the MIL
-  message_interception_layer:start_msg_int_layer(MIL),
+%%  start the CTH
+  commands_transfer_helper:start(CTH),
 %%  send the messages
   timer:sleep(100), % wait first a bit so that logging is in sync
   send_N_messages_with_interval(ds1, dr1, {10, 75}),
@@ -116,14 +116,17 @@ mil_naive_same_payload_scheduler_test(_Config) ->
 
 
 mil_drop_tests(_Config) ->
-  {ok, Scheduler} = scheduler_naive_dropping:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_naive_dropping:register_msg_int_layer(Scheduler, MIL),
+%%  initiate Scheduler, MIL and ETH
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive_dropping:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+%%  start and register dummy senders and receivers
   {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
   message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
-  message_interception_layer:start_msg_int_layer(MIL),
+%%  start the CTH
+  commands_transfer_helper:start(CTH),
 %%  send the messages
   send_N_messages_with_interval(ds1, dr1, {10, 75}),
   timer:sleep(2500),
@@ -136,14 +139,17 @@ mil_drop_tests(_Config) ->
 
 mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
-  {ok, Scheduler} = scheduler_naive_transient_fault:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_naive_transient_fault:register_msg_int_layer(Scheduler, MIL),
+%%  initiate Scheduler, MIL and ETH
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive_transient_fault:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+%%  start and register dummy senders and receivers
   {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
   {ok, DummySender1} = dummy_sender:start(ds1, MIL),
   message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
   message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
-  message_interception_layer:start_msg_int_layer(MIL),
+%%  start the CTH
+  commands_transfer_helper:start(CTH),
 %%  send the messages
   send_N_messages_with_interval(ds1, dr1, {10, 75}),
   timer:sleep(2500),

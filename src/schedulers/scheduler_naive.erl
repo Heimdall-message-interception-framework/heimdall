@@ -8,7 +8,7 @@
 
 -behaviour(gen_server).
 
--export([start/0, register_msg_int_layer/2]).
+-export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -27,24 +27,18 @@
 %%% For External Use
 %%%===================================================================
 
-%% start_scheduler??
-
 send_next_scheduling_instr(Scheduler) ->
   gen_server:cast(Scheduler, {send_next_sched}).
-
-register_msg_int_layer(Scheduler, MIL) ->
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}).
-
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start() ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
+start(MIL) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL], []).
 
-init([]) ->
-  {ok, #state{}}.
+init([MIL]) ->
+  {ok, #state{message_interception_layer_id = MIL}}.
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -53,10 +47,9 @@ handle_cast({start}, State) ->
   erlang:send_after(?INTERVAL, self(), trigger_send_next),
   {noreply, State};
 %%
-handle_cast({new_events, ListNewCommands}, State = #state{}) ->
-  UpdatedCommands = State#state.commands_in_transit ++ ListNewCommands,
+handle_cast({commands_it, ListCommands}, State = #state{}) ->
   send_next_scheduling_instr(self()), % react to new events with new scheduled events
-  {noreply, State#state{commands_in_transit = UpdatedCommands}};
+  {noreply, State#state{commands_in_transit = ListCommands}};
 %%
 handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}};
@@ -104,18 +97,19 @@ next_event_and_state(State) ->
   end.
 
 poll_and_schedule_timeouts(MIL) ->
-%%  type of EnabledTimeouts: orddict ( procs => orddict ( timerref => value ) )
     EnabledTimeouts = message_interception_layer:get_timeouts(MIL),
 %%    just pick the first one for now
-    FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
-    ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),
-    ListProcsWithEnabledTimeouts = orddict:to_list(ProcsWithEnabledTimeouts),
-    case length(ListProcsWithEnabledTimeouts) of
+%%    FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
+%%    ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),
+%%    ListProcsWithEnabledTimeouts = orddict:to_list(ProcsWithEnabledTimeouts),
+    case length(EnabledTimeouts) of
       0 -> ok;
-      _ -> {Proc, TimeoutsProcsOrddict} = lists:nth(1, ListProcsWithEnabledTimeouts),
-        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
+      _ ->
+%%      _ -> {Proc, TimeoutsProcsOrddict} = lists:nth(1, EnabledTimeouts),
+%%        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
 %%        because we filtered for non-empty we do not need to check again
-        {TimerRef, _} = lists:nth(1, TimeoutsProcsList),
+        {TimerRef, _, Proc, _, _, _, _} = lists:nth(length(EnabledTimeouts), EnabledTimeouts),
+        erlang:display(["TimerRef", TimerRef]),
         message_interception_layer:fire_timeout(MIL, Proc, TimerRef)
     end.
 

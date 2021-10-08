@@ -57,12 +57,11 @@ init_per_testcase(TestCase, Config) ->
   logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
 
   % create message interception layer
-  {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  gen_server:cast(MIL, {start}),
-
+  commands_transfer_helper:start(CTH),
   Config.
 
 end_per_testcase(_, Config) ->

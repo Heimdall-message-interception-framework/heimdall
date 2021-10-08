@@ -8,7 +8,7 @@
 
 -behaviour(gen_server).
 
--export([start/1, start_scheduler/1, register_msg_int_layer/2]).
+-export([start/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -25,32 +25,25 @@
 %%% For External Use
 %%%===================================================================
 
-start_scheduler(Scheduler) ->
-  gen_server:cast(Scheduler, {start}).
-
 send_next_scheduling_instr(Scheduler) ->
   gen_server:cast(Scheduler, {send_next_sched}).
-
-register_msg_int_layer(Scheduler, MIL) ->
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(StandardPayload) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [StandardPayload], []).
+start(MIL, StandardPayload) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL, StandardPayload], []).
 
-init([StandardPayload]) ->
-  {ok, #state{standard_payload = StandardPayload}}.
+init([MIL, StandardPayload]) ->
+  {ok, #state{message_interception_layer_id = MIL, standard_payload = StandardPayload}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
 
-handle_cast({new_events, ListNewCommands}, State = #state{}) ->
-  UpdatedCommands = State#state.commands_in_transit ++ ListNewCommands,
+handle_cast({commands_it, ListNewCommands}, State = #state{}) ->
   send_next_scheduling_instr(self()), % react to new events with new scheduled events
-  {noreply, State#state{commands_in_transit = UpdatedCommands}};
+  {noreply, State#state{commands_in_transit = ListNewCommands}};
 handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
   {noreply, State#state{message_interception_layer_id = MIL}};
 handle_cast({send_next_sched}, State = #state{}) ->

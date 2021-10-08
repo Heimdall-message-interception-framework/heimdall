@@ -43,7 +43,7 @@ end_per_suite(Config) ->
   Config.
 
 election_safety_good_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_election_safety, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_election_safety, [self(), true, true]), % propsat, armed
   submit_ra_server_state_variable_event(proc1, current_term, 0),
   submit_ra_server_state_variable_event(proc2, current_term, 0),
   submit_ra_server_state_variable_event(proc1, leader_id, proc1),
@@ -54,12 +54,12 @@ election_safety_good_1(_Config) ->
   submit_ra_server_state_variable_event(proc1, current_term, 1),
   submit_ra_server_state_variable_event(proc2, leader_id, proc2),
   submit_ra_server_state_variable_event(proc1, leader_id, proc2),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_election_safety, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_election_safety, []),
+  PropSat = gen_event:call(?ObserverManager, raft_election_safety, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_election_safety, []),
   check_result(?FUNCTION_NAME, PropSat, true).
 
 election_safety_bad_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_election_safety, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_election_safety, [self(), true, true]), % propsat, armed
   submit_ra_server_state_variable_event(proc1, current_term, 0),
   submit_ra_server_state_variable_event(proc2, current_term, 0),
   submit_ra_server_state_variable_event(proc1, leader_id, proc1),
@@ -71,12 +71,12 @@ election_safety_bad_1(_Config) ->
   submit_ra_server_state_variable_event(proc2, leader_id, proc2),
 %%  proc1's term is still 1 and leader does not match then
   submit_ra_server_state_variable_event(proc1, leader_id, proc2),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_election_safety, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_election_safety, []),
+  PropSat = gen_event:call(?ObserverManager, raft_election_safety, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_election_safety, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 leader_append_only_good_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_leader_append_only, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_leader_append_only, [self(), true, true]), % propsat, armed
   submit_ra_server_state_variable_event(proc1, leader_id, proc2),
   submit_ra_log_event(proc1, 0, 1, false, undefined),
   submit_ra_log_event(proc1, 1, 1, false, undefined),
@@ -87,13 +87,13 @@ leader_append_only_good_1(_Config) ->
   submit_ra_server_state_variable_event(proc2, leader_id, proc2),
   submit_ra_log_event(proc2, 2, 1, false, undefined),
   submit_ra_log_event(proc2, 3, 1, false, undefined),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_leader_append_only, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_leader_append_only, []),
+  PropSat = gen_event:call(?ObserverManager, raft_leader_append_only, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_leader_append_only, []),
   check_result(?FUNCTION_NAME, PropSat, true).
 
 
 leader_append_only_bad_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_leader_append_only, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_leader_append_only, [self(), true, true]), % propsat, armed
   submit_ra_server_state_variable_event(proc1, leader_id, proc2),
   submit_ra_log_event(proc1, 0, 1, false, undefined),
   submit_ra_log_event(proc1, 1, 1, false, undefined),
@@ -104,13 +104,13 @@ leader_append_only_bad_1(_Config) ->
   submit_ra_server_state_variable_event(proc2, leader_id, proc2),
   submit_ra_log_event(proc2, 2, 1, false, undefined),
   submit_ra_log_event(proc2, 2, 1, true, undefined),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_leader_append_only, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_leader_append_only, []),
+  PropSat = gen_event:call(?ObserverManager, raft_leader_append_only, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_leader_append_only, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 
 leader_completeness_good_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_leader_completeness, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_leader_completeness, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, commit_index, 0),
@@ -122,12 +122,12 @@ leader_completeness_good_1(_Config) ->
   submit_ra_log_event(proc2, 2, 0, false, undefined),
   submit_ra_log_event(proc2, 3, 0, false, undefined),
   submit_ra_server_state_variable_event(proc2, commit_index, 3),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_leader_completeness, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_leader_completeness, []),
+  PropSat = gen_event:call(?ObserverManager, raft_leader_completeness, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_leader_completeness, []),
   check_result(?FUNCTION_NAME, PropSat, true).
 
 leader_completeness_bad_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_leader_completeness, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_leader_completeness, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, commit_index, 0),
@@ -140,12 +140,12 @@ leader_completeness_bad_1(_Config) ->
   submit_ra_log_event(proc2, 1, 0, false, undefined),
   submit_ra_log_event(proc2, 2, 0, false, undefined),
   submit_ra_server_state_variable_event(proc2, commit_index, 3),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_leader_completeness, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_leader_completeness, []),
+  PropSat = gen_event:call(?ObserverManager, raft_leader_completeness, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_leader_completeness, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 leader_completeness_bad_2(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_leader_completeness, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_leader_completeness, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, commit_index, 0),
@@ -156,13 +156,13 @@ leader_completeness_bad_2(_Config) ->
   submit_ra_server_state_variable_event(proc2, commit_index, 2),
 %%  proc2 has decreasing commit_index
   submit_ra_server_state_variable_event(proc2, commit_index, 1),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_leader_completeness, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_leader_completeness, []),
+  PropSat = gen_event:call(?ObserverManager, raft_leader_completeness, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_leader_completeness, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 
 state_machine_safety_good_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_state_machine_safety, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_state_machine_safety, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, last_applied, 0),
@@ -174,12 +174,12 @@ state_machine_safety_good_1(_Config) ->
   submit_ra_log_event(proc2, 2, 0, false, undefined),
   submit_ra_log_event(proc2, 3, 0, false, undefined),
   submit_ra_server_state_variable_event(proc2, last_applied, 3),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_state_machine_safety, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_state_machine_safety, []),
+  PropSat = gen_event:call(?ObserverManager, raft_state_machine_safety, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_state_machine_safety, []),
   check_result(?FUNCTION_NAME, PropSat, true).
 
 state_machine_safety_bad_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_state_machine_safety, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_state_machine_safety, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, last_applied, 0),
@@ -192,12 +192,12 @@ state_machine_safety_bad_1(_Config) ->
   submit_ra_log_event(proc2, 1, 0, false, undefined),
   submit_ra_log_event(proc2, 2, 0, false, undefined),
   submit_ra_server_state_variable_event(proc2, last_applied, 3),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_state_machine_safety, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_state_machine_safety, []),
+  PropSat = gen_event:call(?ObserverManager, raft_state_machine_safety, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_state_machine_safety, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 state_machine_safety_bad_2(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_state_machine_safety, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_state_machine_safety, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 0, 0, false, undefined),
   submit_ra_log_event(proc2, 0, 0, false, undefined),
   submit_ra_server_state_variable_event(proc1, last_applied, 0),
@@ -208,31 +208,31 @@ state_machine_safety_bad_2(_Config) ->
   submit_ra_server_state_variable_event(proc2, last_applied, 2),
 %%  proc2 has decreasing last_applied
   submit_ra_server_state_variable_event(proc2, last_applied, 1),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_state_machine_safety, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_state_machine_safety, []),
+  PropSat = gen_event:call(?ObserverManager, raft_state_machine_safety, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_state_machine_safety, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 
 log_matching_good_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_log_matching, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_log_matching, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 1, 0, false, data1),
   submit_ra_log_event(proc2, 1, 0, false, data1),
   submit_ra_log_event(proc1, 2, 1, false, data2),
   submit_ra_log_event(proc2, 2, 2, false, data3),
   submit_ra_log_event(proc2, 2, 1, true, data2),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_log_matching, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_log_matching, []),
+  PropSat = gen_event:call(?ObserverManager, raft_log_matching, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_log_matching, []),
   check_result(?FUNCTION_NAME, PropSat, true).
 
 log_matching_bad_1(_Config) ->
-  gen_event:add_handler(?ObserverManager, raft_observer_log_matching, [self(), true, true]), % propsat, armed
+  gen_event:add_handler(?ObserverManager, raft_log_matching, [self(), true, true]), % propsat, armed
   submit_ra_log_event(proc1, 1, 0, false, data1),
   submit_ra_log_event(proc2, 1, 0, false, data1),
   submit_ra_log_event(proc1, 2, 1, false, data2),
   submit_ra_log_event(proc2, 2, 1, false, data3),
   submit_ra_log_event(proc2, 2, 1, true, data2),
-  PropSat = gen_event:call(?ObserverManager, raft_observer_log_matching, get_result),
-  gen_event:delete_handler(?ObserverManager, raft_observer_log_matching, []),
+  PropSat = gen_event:call(?ObserverManager, raft_log_matching, get_result),
+  gen_event:delete_handler(?ObserverManager, raft_log_matching, []),
   check_result(?FUNCTION_NAME, PropSat, false).
 
 %%  internal helper with mocked process id

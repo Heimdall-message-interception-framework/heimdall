@@ -1,4 +1,4 @@
--module(raft_observer_election_safety).
+-module(raft_election_safety).
 -behaviour(gen_event).
 
 -include("observer_events.hrl").

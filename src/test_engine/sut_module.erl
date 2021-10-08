@@ -7,5 +7,5 @@
 -callback bootstrap(Config :: any()) -> Config :: any().
 -callback generate_instruction(AbstrInstruction ::#abstract_instruction{},
     Config :: any()) -> {#instruction{}, Config :: any()}.
--callback get_instructions(Config :: any()) -> {[#abstract_instruction{}], Config :: any()}.
--callback get_observers(Config :: any()) -> {[atom()], Config :: any()}.
+-callback get_instructions(Config :: any()) -> [#abstract_instruction{}].
+-callback get_observers(Config :: any()) -> [atom()].

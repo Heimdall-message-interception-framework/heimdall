@@ -1,4 +1,4 @@
--module(raft_observer_leader_completeness).
+-module(raft_log_matching).
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
@@ -11,7 +11,7 @@
     armed = true :: boolean(),
     update_target = undefined :: any(),
     history_of_events = queue:new() :: queue:queue(),
-    process_to_commit_idx_map = maps:new() :: maps:maps()
+    process_to_log_map = maps:new() :: maps:maps(any(), array:array())
 %%    TO ADD: add more fields
     }).
 
@@ -38,7 +38,7 @@ handle_event({process,
             ra_machine_reply_write -> {true, State1};
             ra_machine_reply_read -> {true, State1};
             ra_machine_side_effects -> {true, State1};
-            ra_server_state_variable -> handle_state_variable_event(Proc, EvContent, State);
+            ra_server_state_variable -> {true, State1};
             _ -> erlang:display("unmatched event")
         end,
     case PropSat of
@@ -69,23 +69,45 @@ add_to_history(State, GeneralEvent) ->
     NewHistory = queue:in(GeneralEvent, State#state.history_of_events),
     State#state{history_of_events = NewHistory}.
 
-handle_log_request(Proc, #ra_log_obs_event{idx = Idx},
-    #state{process_to_commit_idx_map = ProcCommIdxMap} = State) ->
-%%    get commit index
-    CommitIdx = maps:get(Proc, ProcCommIdxMap, -1),
-%%    check whether log writes before that
-    StillSat = CommitIdx < Idx,
-    {StillSat, State}.
+handle_log_request(Proc, #ra_log_obs_event{idx = Idx, term = Term, data = Data},
+    #state{process_to_log_map = ProcLogMap} = State) ->
+    ArrayLog = case maps:get(Proc, ProcLogMap, undefined) of
+        undefined ->  %
+            array:set(10, true, array:new());
+        SomeLog ->  % add new array to map
+            SomeLog
+    end,
+    ArrayLog1 = array:set(Idx, {Term, Data}, ArrayLog),
+    ProcLogMap1 = maps:put(Proc, ArrayLog1, ProcLogMap),
+    State1 = State#state{process_to_log_map = ProcLogMap1},
+    Result = check_that_logs_match(Proc, Idx, ProcLogMap1),
+    {Result, State1}.
 
-%% new commit_index for Proc
-handle_state_variable_event(Proc, #ra_server_state_variable_obs_event{state_variable = commit_index, value = CommitIndex},
-    #state{process_to_commit_idx_map = ProcCommIdxMap} = State) ->
-%%    get previous commit index
-    PrevCommIndex = maps:get(Proc, ProcCommIdxMap, -1),
-%%    check if commit index monotonically increases
-    StillSat = PrevCommIndex =< CommitIndex,
-%%    store new commit index
-    ProcCommIdxMap1 = maps:put(Proc, CommitIndex, ProcCommIdxMap),
-    {StillSat, State#state{process_to_commit_idx_map = ProcCommIdxMap1}};
-handle_state_variable_event(_Proc, _EvContent, State) ->
-    {true, State}.
+
+check_that_logs_match(Proc, Idx, ProcLogMap) ->
+    Log = maps:get(Proc, ProcLogMap),
+    IndivCheckFunction = fun(OtherProc, OtherLog, AccIn) ->
+        case Proc == OtherProc of
+            true -> AccIn;
+            false ->
+                case {array:get(Idx, Log), array:get(Idx, OtherLog)} of
+                    {{Term, _Data1}, {Term, _Data2}} -> % agree
+                        Result = check_two_logs_up_to_index(array:to_list(Log), array:to_list(OtherLog), Idx+3),
+                        AccIn andalso Result;
+                    _ -> AccIn
+                end
+        end
+    end,
+    Result = maps:fold(IndivCheckFunction, true, ProcLogMap),
+    Result.
+
+%% expects lists, not arrays
+check_two_logs_up_to_index(Log1, Log2, Index) ->
+    case Index of
+        0 -> true;
+        _ ->
+            case {Log1, Log2} of
+                {[X|Rest1], [X|Rest2]} -> check_two_logs_up_to_index(Rest1, Rest2, Index-1);
+                _ -> false
+            end
+    end.

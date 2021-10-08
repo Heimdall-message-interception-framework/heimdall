@@ -11,9 +11,9 @@
 
 get_instructions(Config) ->
     Module = Config#config.bc_type,
-    {[#abstract_instruction{module = Module, function = broadcast}], Config}.
+    [#abstract_instruction{module = Module, function = broadcast}].
 
-get_observers(Config) -> {[agreement, causal_delivery, no_creation, no_duplications, validity], Config}.
+get_observers(_Config) -> [agreement, causal_delivery, no_creation, no_duplications, validity].
 
 -spec bootstrap(#config{}) -> #config{}.
 bootstrap(Config) ->

@@ -1,4 +1,4 @@
--module(raft_observer_state_machine_safety).
+-module(raft_leader_append_only).
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
@@ -6,22 +6,28 @@
 
 -export([init/1, handle_call/2, handle_event/2]).
 
+%% observer stores last stored idx for every process
+%% - if not leader, checks whether idx increases if truncate is false (debug info if not)
+%% - if leader, checks that idx increases and truncate is never false
+%% assumption: a process knows when it is leader
+
 -record(state, {
     property_satisfied = true :: boolean(),
     armed = true :: boolean(),
     update_target = undefined :: any(),
     history_of_events = queue:new() :: queue:queue(),
-    process_to_last_applied_map = maps:new() :: maps:maps()
+    process_to_idx_map = maps:new() :: maps:maps(),
+    process_considers_itself_leader_map = maps:new() :: maps:maps()
 %%    TO ADD: add more fields
     }).
 
 %%    TO ADD: initialise added fields if necessary
 init([UpdateTarget, PropSat, Armed]) ->
-    {ok, #state{update_target= UpdateTarget, property_satisfied= PropSat, armed=Armed}};
+    {ok, #state{update_target = UpdateTarget, property_satisfied = PropSat, armed = Armed}};
 init([UpdateTarget, PropSat]) ->
     init([UpdateTarget, PropSat, true]);
 init([UpdateTarget]) ->
-    init([UpdateTarget, true]);
+    init([UpdateTarget, true, false]);
 init(_) ->
     init([undefined, true]).
 
@@ -69,23 +75,36 @@ add_to_history(State, GeneralEvent) ->
     NewHistory = queue:in(GeneralEvent, State#state.history_of_events),
     State#state{history_of_events = NewHistory}.
 
-handle_log_request(Proc, #ra_log_obs_event{idx = Idx},
-    #state{process_to_last_applied_map = ProcLastAppliedIdxMap} = State) ->
-%%    get last applied index
-    LastApplied = maps:get(Proc, ProcLastAppliedIdxMap, -1),
-%%    check whether log writes before that
-    StillSat = LastApplied < Idx,
-    {StillSat, State}.
+handle_log_request(Proc, #ra_log_obs_event{idx = Idx, trunc = Trunc},
+    #state{process_to_idx_map = ProcIdxMap, process_considers_itself_leader_map = ProcLeaderMap} = State) ->
+%%    check whether considered leader
+    ConsidersItselfLeader = maps:get(Proc, ProcLeaderMap, false),
+%%    get last Idx that was written
+    LastIdx = maps:get(Proc, ProcIdxMap, -1),
+    ProcIdxMap1 = maps:put(Proc, Idx, ProcIdxMap),
+    State1 = State#state{process_to_idx_map = ProcIdxMap1},
+    {StillSat, State2} =
+        case ConsidersItselfLeader of
+            true -> % check for leader
+                {not ((Idx =< LastIdx) orelse Trunc), State1};
+            false -> % check for follower and issue warning
+                Conjunction = (Idx =< LastIdx) and (not Trunc),
+                case Conjunction of
+                    true -> erlang:display("Idx is smaller than or equal LastIdx but not listed as Truncate"),
+                        erlang:display(["Idx", Idx, "LastIdx", LastIdx, "Trunc", Trunc]);
+                    false -> ok
+                end,
+                {true, State1}
+        end,
+    {StillSat, State2}.
 
-%% new last_applied for Proc
-handle_state_variable_event(Proc, #ra_server_state_variable_obs_event{state_variable = last_applied, value = LastApplied},
-    #state{process_to_last_applied_map = ProcLastAppliedIdxMap} = State) ->
-%%    get previous last applied index
-    PrevLastApplied = maps:get(Proc, ProcLastAppliedIdxMap, -1),
-%%    check if last applied index monotonically increases
-    StillSat = PrevLastApplied =< LastApplied,
-%%    store new last applied index
-    ProcCommIdxMap1 = maps:put(Proc, LastApplied, ProcLastAppliedIdxMap),
-    {StillSat, State#state{process_to_last_applied_map = ProcCommIdxMap1}};
+%% new leader_id for Proc
+%% TODO: probably does not work as self() returns pid and leaders are names, debug with the erlang:display's
+handle_state_variable_event(Proc, #ra_server_state_variable_obs_event{state_variable = leader_id, value = MaybeProcLeader},
+    #state{process_considers_itself_leader_map = ProcLeaderMap} = State) ->
+%%    erlang:display(["Proc", Proc]),
+%%    erlang:display(["MaybeProcLeader", MaybeProcLeader]),
+    ProcLeaderMap1 = maps:put(Proc, Proc == MaybeProcLeader, ProcLeaderMap),
+    {true, State#state{process_considers_itself_leader_map = ProcLeaderMap1}};
 handle_state_variable_event(_Proc, _EvContent, State) ->
     {true, State}.

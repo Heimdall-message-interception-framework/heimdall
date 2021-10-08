@@ -30,7 +30,7 @@
 %% added typing from dialyzer but where does {_, _} come from?
 -spec choose_instruction(_,_,_,nonempty_improper_list(any(),{_,_})) -> #instruction{args::[any(),...]}.
 choose_instruction(MIL, SUTInstructions, SchedInstructions, History) ->
-  #state{commands_in_transit = CommInTransit,
+  #prog_state{commands_in_transit = CommInTransit,
           timeouts = Timeouts,
           nodes = Nodes,
           crashed = Crashed} = getLastStateOfHistory(History),

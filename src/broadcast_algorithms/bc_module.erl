@@ -2,19 +2,24 @@
 -behaviour(sut_module).
 -include("test_engine_types.hrl").
 
--export([bootstrap/0, get_instructions/0, get_observers/0, generate_instruction/1]).
+-export([bootstrap/1, get_instructions/1, get_observers/1, generate_instruction/2]).
 
-bc_type() -> application:get_env(sched_msg_interception_erlang, bc_type, causal_broadcast).
+-record(config, {num_processes = 3 :: pos_integer(),
+                 dlv_to :: pid(),
+                 bc_type = causal_broadcast :: atom(),
+                 bc_pids :: [pid()]}).
 
-get_instructions() -> [#abstract_instruction{module = bc_type(), function = broadcast}].
+get_instructions(Config) ->
+    Module = Config#config.bc_type,
+    {[#abstract_instruction{module = Module, function = broadcast}], Config}.
 
-get_observers() -> [agreement, causal_delivery, no_creation, no_duplications, validity].
+get_observers(Config) -> {[agreement, causal_delivery, no_creation, no_duplications, validity], Config}.
 
--spec bootstrap() -> [pid()].
-bootstrap() ->
-    NumProcesses = application:get_env(sched_msg_interception_erlang, num_proc, 3),
-    DeliverTo = application:get_env(sched_msg_interception_erlang, bc_dlv_to, self()),
-    BCType = bc_type(),
+-spec bootstrap(#config{}) -> #config{}.
+bootstrap(Config) ->
+    NumProcesses = Config#config.num_processes,
+    DeliverTo = self(),
+    BCType = Config#config.bc_type,
     % create link layer
     {ok, LL} = gen_server:start_link(link_layer_simple, [], []),
     % start broadcast processes
@@ -24,11 +29,12 @@ bootstrap() ->
         Pid end,
     BC_Pids = lists:map(StartBCProcess, lists:seq(0, NumProcesses - 1)),
     application:set_env(sched_msg_interception_erlang, bc_pids, BC_Pids),
-    BC_Pids.
+    Config#config{bc_pids = BC_Pids}.
 
-generate_instruction(#abstract_instruction{function = broadcast}) ->
+generate_instruction(#abstract_instruction{function = broadcast}, Config) ->
     % select random process to broadcast the message
-    BC_Pids = application:get_env(sched_msg_interception_erlang, bc_pids, undefined),
+    BC_Pids = Config#config.bc_pids,
     BC = lists:nth(rand:uniform(length(BC_Pids)), BC_Pids),
 
-    #instruction{module = bc_type(), function = broadcast, args = [BC, "Hello World!"]}.
+    Module = Config#config.bc_type,
+    {#instruction{module = Module, function = broadcast, args = [BC, "Hello World!"]}, Config}.

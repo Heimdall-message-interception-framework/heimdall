@@ -97,18 +97,19 @@ next_event_and_state(State) ->
   end.
 
 poll_and_schedule_timeouts(MIL) ->
-%%  type of EnabledTimeouts: orddict ( procs => orddict ( timerref => value ) )
     EnabledTimeouts = message_interception_layer:get_timeouts(MIL),
 %%    just pick the first one for now
-    FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
-    ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),
-    ListProcsWithEnabledTimeouts = orddict:to_list(ProcsWithEnabledTimeouts),
-    case length(ListProcsWithEnabledTimeouts) of
+%%    FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
+%%    ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),
+%%    ListProcsWithEnabledTimeouts = orddict:to_list(ProcsWithEnabledTimeouts),
+    case length(EnabledTimeouts) of
       0 -> ok;
-      _ -> {Proc, TimeoutsProcsOrddict} = lists:nth(1, ListProcsWithEnabledTimeouts),
-        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
+      _ ->
+%%      _ -> {Proc, TimeoutsProcsOrddict} = lists:nth(1, EnabledTimeouts),
+%%        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
 %%        because we filtered for non-empty we do not need to check again
-        {TimerRef, _} = lists:nth(1, TimeoutsProcsList),
+        {TimerRef, _, Proc, _, _, _, _} = lists:nth(1, EnabledTimeouts),
+        erlang:display(["TimerRef", TimerRef]),
         message_interception_layer:fire_timeout(MIL, Proc, TimerRef)
     end.
 

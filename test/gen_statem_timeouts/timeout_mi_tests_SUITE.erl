@@ -53,7 +53,6 @@ init_per_testcase(TestCase, Config) ->
   {ok, MIL} = message_interception_layer:start(),
   {ok, Scheduler} = scheduler_naive:start(MIL),
   {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
-  commands_transfer_helper:start(CTH),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 %%  start observer and state machine
   {ok, _Observer} = observer_timeouts:start(),
@@ -61,8 +60,8 @@ init_per_testcase(TestCase, Config) ->
   message_interception_layer:register_with_name(MIL, statem_w_timeouts_mi, StatemPID, statem_w_timeouts_mi),
      % we use the module as name here in case it is used in calls or casts
   message_interception_layer:register_with_name(MIL, client, self(), test_client),
-%%  start the MIL
-  message_interception_layer:start_msg_int_layer(MIL),
+%%  start the CTH
+  commands_transfer_helper:start(CTH),
 %%  set logs
   {FileReadable, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
   logger:add_handler(readable_handler, logger_std_h, ConfigReadable),

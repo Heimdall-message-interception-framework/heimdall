@@ -46,6 +46,7 @@ getLastStateOfHistory({_, State}) ->
 
 
 get_next_instruction(MIL, SUTInstructionModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed) ->
+%%  Crashed are the transient ones
   KindInstruction = get_kind_of_instruction(),
   NextInstruction = case KindInstruction of
     sut_instruction -> produce_sut_instruction(SUTInstructionModule);

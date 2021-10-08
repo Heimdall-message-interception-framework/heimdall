@@ -10,11 +10,11 @@
 
 -behaviour(gen_server).
 
--export([start_msg_int_layer/1, register_with_name/4,
+-export([register_with_name/4,
   duplicate_msg_command/4, alter_msg_command/5, transient_crash/2, rejoin/2,
   permanent_crash/2, msg_command/6, exec_msg_command/7, enable_timeout/5, disable_timeout/3,
   drop_msg_command/4, enable_timeout/4, fire_timeout/3, get_timeouts/1, get_commands_in_transit/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1]).
--export([start/1]).
+-export([start/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
@@ -22,6 +22,7 @@
 -define(INTERVAL, 50).
 
 -record(state, {
+%%  TODO: reverse order of lists
   registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
 %%  client_nodes = orddict:new() :: orddict:orddict(Name::atom(), pid()),
@@ -33,8 +34,6 @@
   new_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
   enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(),
                                                       orddict:orddict({TimerRef::reference(), {Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}})),
-%%  scheduler_id is only used to send the new_events, we could also request these with the scheduler
-  scheduler_id :: pid(),
   id_counter = 0 :: any()
 }).
 
@@ -42,10 +41,6 @@
 %%% Functions for External Use
 %%%===================================================================
 %% TODO: distinguish into functions called from SUT and the scheduling engine
-
-start_msg_int_layer(MIL) ->
-%%  add new ets table
-  gen_server:cast(MIL, {start}).
 
 %% registration of processes
 
@@ -74,11 +69,9 @@ exec_msg_command(MIL, ID, From, To) ->
 duplicate_msg_command(MIL, ID, From, To) ->
   gen_server:cast(MIL, {duplicate, {ID, From, To}}).
 
-%% TODO: change parameters
 alter_msg_command(MIL, Id, From, To, NewArgs) ->
   gen_server:cast(MIL, {send_altered, {Id, From, To, NewArgs}}).
 
-%% TODO: change parameters
 drop_msg_command(MIL, Id, From, To) ->
   gen_server:cast(MIL, {drop, {Id, From, To}}).
 
@@ -141,14 +134,14 @@ get_permanent_crashed_nodes(MIL) ->
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Scheduler) ->
-  gen_server:start_link(?MODULE, [Scheduler], []).
+start() ->
+  gen_server:start_link(?MODULE, [], []).
 
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([Scheduler]) ->
-  {ok, #state{scheduler_id = Scheduler}}.
+init([]) ->
+  {ok, #state{}}.
 
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
     State :: #state{}) ->
@@ -167,8 +160,6 @@ handle_call({get_all_node_names}, _From, #state{} = State) ->
   {reply, NodeNames, State};
 handle_call({get_commands}, _From, State = #state{}) ->
   {reply, State#state.list_commands_in_transit, State};
-%%handle_call({get_commands}, #state{list_commands_in_transit = CommandsInTransit} = State, _From) ->
-%%  {reply, CommandsInTransit, State};
 handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, MsgContent}]}}, _From,
     State = #state{})
   when not is_tuple(ProcPid)->
@@ -344,13 +335,13 @@ handle_cast({send_altered, {Id, From, To, NewArgs}}, State = #state{}) ->
   {Mod, Func, _Args, Skipped, NewCommandStore} =
     find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, NewArgs),
-%%  TODO: update the commands
 %%  logger:info("snd_altr", #{what => snd_altr, id => Id, from => From, to => To,
 %%                            mod => Mod, func => Func, args => NewArgs, skipped => Skipped}),
   SchedEvent = #sched_event{what = snd_altr, id = Id, from = From, to = To,
     mod = Mod, func = Func, args = NewArgs, skipped = Skipped},
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{commands_in_transit = NewCommandStore}};
+  NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
+  {noreply, State#state{commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
 handle_cast({drop, {Id, From, To}}, State = #state{}) ->
   {Mod, Func, Args, Skipped, NewCommandStore} =
@@ -421,10 +412,8 @@ handle_cast(Msg, State) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(trigger_get_events, State = #state{}) ->
-  gen_server:cast(State#state.scheduler_id, {new_events, State#state.new_commands_in_transit}),
-  restart_timer(),
-  {noreply, State#state{new_commands_in_transit = []}}.
+handle_info(_Info, State = #state{}) ->
+  {noreply, State}.
 
 terminate(_Reason, _State = #state{}) ->
   ok.
@@ -453,9 +442,9 @@ pid_to_node(State, Pid) ->
 %%send_client_req(State, From, To, Msg) ->
 %%  gen_server:cast(To, {message, client_pid(State, From), node_pid(State, To), Msg}).
 
-restart_timer() ->
-  erlang:send_after(?INTERVAL, self(), trigger_get_events).
-
+%%restart_timer() ->
+%%  erlang:send_after(?INTERVAL, self(), trigger_get_events).
+%%
 check_if_crashed(State, To) ->
   sets:is_element(To, State#state.transient_crashed_nodes) or sets:is_element(To, State#state.permanent_crashed_nodes).
 

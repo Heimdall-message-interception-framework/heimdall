@@ -50,9 +50,10 @@ end_per_suite(_Config) ->
 
 init_per_testcase(TestCase, Config) ->
 %%  start MIL and Scheduler
-  {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  scheduler_naive:register_msg_int_layer(Scheduler, MIL),
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  commands_transfer_helper:start(CTH),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 %%  start observer and state machine
   {ok, _Observer} = observer_timeouts:start(),

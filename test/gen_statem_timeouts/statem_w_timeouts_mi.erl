@@ -139,18 +139,15 @@ general_TO(EventType, EventContent, State) ->
 
 another_state(timeout, event_timed_out, _State = #statem_w_timeouts_state{}) ->
   observer_timeouts:add_new_event(another_state__event_timed_out),
-%%  erlang:display("event timed out in another state; should not happen"),
   {keep_state_and_data};
 another_state(state_timeout, state_timed_out, _State = #statem_w_timeouts_state{}) ->
   observer_timeouts:add_new_event(another_state__state_timed_out),
-%%  erlang:display("state timed out in another state; shoud not happen"),
   {keep_state_and_data};
 another_state({timeout, general}, general_timed_out, State = #statem_w_timeouts_state{}) ->
   observer_timeouts:add_new_event(another_state__general_timed_out),
-%%  erlang:display("general timed out in another state"),
   {next_state, final, State};
 another_state(EventType, EventContent, State) ->
-  erlang:display("any other event should not happen"),
+  erlang:display(["any other event should not happen", EventType, EventContent]),
   handle_event(EventType, EventContent, State).
 
 final(EventType, EventContent, State) ->
@@ -170,7 +167,7 @@ handle_event(cast, {keep_state}, State = #statem_w_timeouts_state{}) ->
   {keep_state, State};
 handle_event(_EventType, _EventContent, _State) ->
   observer_timeouts:add_new_event(any_state__unhandled_event),
-  erlang:display("unhandled event"),
+  erlang:display(["unhandled event", _EventType, _EventContent]),
   {keep_state_and_data}.
 
 %% @private

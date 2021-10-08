@@ -108,7 +108,7 @@ poll_and_schedule_timeouts(MIL) ->
 %%      _ -> {Proc, TimeoutsProcsOrddict} = lists:nth(1, EnabledTimeouts),
 %%        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
 %%        because we filtered for non-empty we do not need to check again
-        {TimerRef, _, Proc, _, _, _, _} = lists:nth(1, EnabledTimeouts),
+        {TimerRef, _, Proc, _, _, _, _} = lists:nth(length(EnabledTimeouts), EnabledTimeouts),
         erlang:display(["TimerRef", TimerRef]),
         message_interception_layer:fire_timeout(MIL, Proc, TimerRef)
     end.

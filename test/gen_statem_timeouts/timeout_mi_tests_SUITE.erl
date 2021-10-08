@@ -85,6 +85,7 @@ test_event_to(_Config) ->
 
 test_event_to_keep_state(_Config) ->
   statem_w_timeouts_mi:set_event_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:keep_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -93,6 +94,7 @@ test_event_to_keep_state(_Config) ->
 
 test_event_to_switch_state(_Config) ->
   statem_w_timeouts_mi:set_event_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:switch_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -108,6 +110,7 @@ test_state_to(_Config) ->
 
 test_state_to_keep_state(_Config) ->
   statem_w_timeouts_mi:set_state_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:keep_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -116,6 +119,7 @@ test_state_to_keep_state(_Config) ->
 
 test_state_to_switch_state(_Config) ->
   statem_w_timeouts_mi:set_state_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:switch_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -124,6 +128,7 @@ test_state_to_switch_state(_Config) ->
 
 test_state_to_cancel_to(_Config) ->
   statem_w_timeouts_mi:set_state_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:cancel_state_to(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -132,6 +137,7 @@ test_state_to_cancel_to(_Config) ->
 
 test_state_to_set_inf(_Config) ->
   statem_w_timeouts_mi:set_state_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:set_state_to(infinity),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -140,6 +146,7 @@ test_state_to_set_inf(_Config) ->
 
 test_state_to_reset_time(_Config) ->
   statem_w_timeouts_mi:set_state_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:set_state_to(200),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -155,6 +162,7 @@ test_general_to(_Config) ->
 
 test_general_to_keep_state(_Config) ->
   statem_w_timeouts_mi:set_general_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:keep_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -163,6 +171,7 @@ test_general_to_keep_state(_Config) ->
 
 test_general_to_switch_state(_Config) ->
   statem_w_timeouts_mi:set_general_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:switch_state(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -171,6 +180,7 @@ test_general_to_switch_state(_Config) ->
 
 test_general_to_cancel_to(_Config) ->
   statem_w_timeouts_mi:set_general_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:cancel_general_to(),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -179,6 +189,7 @@ test_general_to_cancel_to(_Config) ->
 
 test_general_to_set_inf(_Config) ->
   statem_w_timeouts_mi:set_general_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:set_general_to(infinity),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),
@@ -187,6 +198,7 @@ test_general_to_set_inf(_Config) ->
 
 test_general_to_reset_time(_Config) ->
   statem_w_timeouts_mi:set_general_to(),
+  timer:sleep(100),
   statem_w_timeouts_mi:set_general_to(200),
   timer:sleep(?TIMEOUTINTERVAL),
   ListEvents = observer_timeouts:get_list_events(),

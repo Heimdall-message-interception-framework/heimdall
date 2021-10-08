@@ -369,19 +369,6 @@ check_if_crashed(State, To) ->
 get_all_node_names_from_state(State) ->
   orddict:fetch_keys(State#state.registered_nodes_pid).
 
-%%find_id_in_queue(QueueToSearch, Id) ->
-%%  find_id_in_queue([], QueueToSearch, Id).
-%%
-find_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
-  {{value, {CurrentId, CurrentPayload}}, NewTailQueueToSearch} = queue:out(TailQueueToSearch),
-  case CurrentId == Id  of
-    true -> ReversedSkipped = lists:reverse(SkippedList),
-            {CurrentPayload, ReversedSkipped, queue:join(queue:from_list(ReversedSkipped), NewTailQueueToSearch)};
-%%    skipped does only contain the IDs
-    false -> find_id_in_queue([CurrentId | SkippedList], NewTailQueueToSearch, Id)
-%%  TODO: assumes that ID is in there
-  end.
-
 find_cmd_and_get_updated_commands_in_transit(State, Id, From, To) ->
   QueueToSearch = orddict:fetch({From, To}, State#state.map_commands_in_transit),
   {Mod, Func, Args, Skipped, UpdatedQueue} = find_cmd_id_in_queue(QueueToSearch, Id),
@@ -390,8 +377,6 @@ find_cmd_and_get_updated_commands_in_transit(State, Id, From, To) ->
 
 do_exec_cmd(Mod, Func, Args) ->
   erlang:apply(Mod, Func, Args).
-
-%% TODO: unify later
 
 find_cmd_id_in_queue(QueueToSearch, Id) ->
   find_cmd_id_in_queue([], QueueToSearch, Id).
@@ -406,10 +391,8 @@ find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
   end.
 
 find_timeout_and_get_updated_ones(#state{enabled_timeouts = EnabledTimeouts}, TimerRef) ->
-  erlang:display(["TimerRef", TimerRef, "Enabled", EnabledTimeouts]),
   FilterFunction = fun({TimerRef1,_ , _, _, _, _, _}) -> TimerRef == TimerRef1  end,
   {RetrievedTimeoutList, NewEnabledTimeouts} = lists:partition(FilterFunction, EnabledTimeouts),
-  erlang:display(["Retrieved", RetrievedTimeoutList, "NotREt", NewEnabledTimeouts]),
   case RetrievedTimeoutList of
     [RetrievedTimeout] -> {RetrievedTimeout, NewEnabledTimeouts};
     [] -> erlang:throw("timeout was not found");

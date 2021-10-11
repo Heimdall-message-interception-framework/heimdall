@@ -4,8 +4,9 @@
 -include("test_engine_types.hrl").
 
 % behaviour callbacks
--callback bootstrap(Config :: any()) -> Config :: any().
--callback generate_instruction(AbstrInstruction ::#abstract_instruction{},
-    Config :: any()) -> {#instruction{}, Config :: any()}.
--callback get_instructions(Config :: any()) -> [#abstract_instruction{}].
--callback get_observers(Config :: any()) -> [atom()].
+-callback start_link(Config :: any()) -> {ok, pid()}.
+-callback bootstrap() -> any().
+-callback generate_instruction(AbstrInstruction ::#abstract_instruction{}) -> #instruction{}.
+-callback get_instructions() -> [#abstract_instruction{}].
+-callback get_observers() -> [atom()].
+% -callback run_instruction(AbstrInstruction ::#abstract_instruction{}) -> any().

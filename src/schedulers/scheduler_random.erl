@@ -28,28 +28,28 @@
 
 %%-spec choose_instruction(any(), [#instruction{}], [#instruction{}], history()) -> #instruction{}.
 %% added typing from dialyzer but where does {_, _} come from?
--spec choose_instruction(_,_,_,nonempty_improper_list(any(),{_,_})) -> #instruction{args::[any(),...]}.
-choose_instruction(MIL, SUTInstructions, SchedInstructions, History) ->
+-spec choose_instruction(MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(MIL, SUTModule, SchedInstructions, History) ->
   #prog_state{commands_in_transit = CommInTransit,
           timeouts = Timeouts,
           nodes = Nodes,
           crashed = Crashed} = getLastStateOfHistory(History),
 %%  we sample a number within the sum of all shares
-  Result = get_next_instruction(MIL, SUTInstructions, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed),
+  Result = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed),
   Result.
 
 
-getLastStateOfHistory([_ | History]) ->
-  getLastStateOfHistory(History);
-getLastStateOfHistory({_, State}) ->
+-spec getLastStateOfHistory(history()) -> #prog_state{}.
+getLastStateOfHistory([{_, State} | _Tail]) ->
   State.
 
 
-get_next_instruction(MIL, SUTInstructionModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed) ->
+-spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _) -> #instruction{}.
+get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed) ->
 %%  Crashed are the transient ones
   KindInstruction = get_kind_of_instruction(),
   NextInstruction = case KindInstruction of
-    sut_instruction -> produce_sut_instruction(SUTInstructionModule);
+    sut_instruction -> produce_sut_instruction(SUTModule);
     sched_instruction -> produce_sched_instruction(MIL, SchedInstructions, CommInTransit);
     timeout_instruction -> produce_timeout_instruction(MIL, Timeouts);
     node_connection_instruction -> produce_node_connection_instruction(MIL, Nodes, Crashed)
@@ -57,13 +57,16 @@ get_next_instruction(MIL, SUTInstructionModule, SchedInstructions, CommInTransit
 %%  in case we produced a kind which was not possible, we simply retry
 %%  TODO: improve this by checking first whether sched_instruction or timeout_instruction is possible
   case NextInstruction of
-    undefined -> get_next_instruction(MIL, SUTInstructionModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed);
+    undefined -> get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed);
     ActualInstruction -> ActualInstruction
   end.
 
--spec produce_sut_instruction(any()) -> #instruction{}.
+-spec produce_sut_instruction(atom()) -> #instruction{}.
 produce_sut_instruction(SUTInstructionModule) ->
-  SUTInstructionModule:produce_instruction().
+  % choose random abstract instruction
+  Instructions = SUTInstructionModule:get_instructions(),
+  Instr = lists:nth(rand:uniform(length(Instructions)), Instructions),
+  SUTInstructionModule:generate_instruction(Instr).
 
 -spec produce_sched_instruction(any(), any(), any()) -> #instruction{} | undefined.
 produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit) when CommInTransit == [] ->

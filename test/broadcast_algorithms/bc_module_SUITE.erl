@@ -17,28 +17,34 @@ end_per_suite(_Config) ->
   _Config.
 
 init_per_testcase(TestCase, Config) ->
-  {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
-  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  gen_server:cast(MIL, {start}),
   Config.
 
 end_per_testcase(_, Config) ->
   Config.
 
-test_module(_Config) ->
+test_module(InitialConfig) ->
     % bc_module:bootstrap(),
-    application:set_env(sched_msg_interception_erlang, bc_pids, [1,2,3,4,5]),
+    {ok, MIL} = message_interception_layer:start(),
+    application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+    Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
+        ++ InitialConfig),
+    {ok, BCMod} = bc_module:start_link(Conf),
+    bc_module:bootstrap(),
     AbstrInst = #abstract_instruction{module = causal_broadcast, function = broadcast},
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
-    io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]).
+    io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
+    
+    process_flag(trap_exit, true),
+    gen_server:stop(BCMod).
+    % gen_server:stop({global,mil}).
 
 test_engine(_Config) ->
-  {ok, Engine} = gen_server:start_link(test_engine, [bc_module, self()], []),
-  Runs = test_engine:explore(Engine, [#abstract_instruction{module=causal_broadcast, function=broadcast}], [], [], 5, 3),
+  {ok, Engine} = gen_server:start_link(test_engine, [bc_module, scheduler_random], []),
+  MILInstructions = [#abstract_instruction{}],
+  Runs = test_engine:explore(Engine, bc_module, maps:from_list(_Config),
+                             MILInstructions, 5, 3),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 
 

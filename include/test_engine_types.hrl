@@ -10,11 +10,11 @@
 }).
 
 -record(prog_state, {
-    properties :: #{atom() => boolean()},
-    commands_in_transit :: [any()], % should have command type
-    timeouts :: [any()], % timeout, assumed that is a tuple of {Proc, TimerRef, etc.} see MIL
-    nodes :: [any()], % process_identifier
-    crashed :: [any()] % process_identifier
+    properties = maps:new() :: #{atom() => boolean()},
+    commands_in_transit = [] :: [any()], % should have command type
+    timeouts = [] :: [any()], % timeout, assumed that is a tuple of {Proc, TimerRef, etc.} see MIL
+    nodes = [] :: [any()], % process_identifier
+    crashed = [] :: [any()] % process_identifier
 }).
 
 -type history() :: [{#instruction{}, #prog_state{}}].

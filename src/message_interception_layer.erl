@@ -11,7 +11,7 @@
 -behaviour(gen_server).
 
 %% gen_server callback
--export([start/0, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
+-export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 %% API for SUT
 -export([register_with_name/4, msg_command/6, enable_timeout/4, disable_timeout/3, enable_timeout/5]).
@@ -98,15 +98,18 @@ rejoin(MIL, Name) ->
 
 %% GETTER
 %%
+-spec get_commands_in_transit(pid()) -> [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}].
 get_commands_in_transit(MIL) ->
   gen_server:call(MIL, {get_commands}).
 %%
+-spec get_timeouts(pid()) -> [{TimerRef::reference(), ID::any(), Proc::any(), Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}].
 get_timeouts(MIL) ->
   gen_server:call(MIL, {get_timeouts}).
 %%
 get_all_node_names(MIL) ->
   gen_server:call(MIL, {get_all_node_names}).
 %%
+-spec get_transient_crashed_nodes(pid()) -> sets:set().
 get_transient_crashed_nodes(MIL) ->
   gen_server:call(MIL, {get_transient_crashed_nodes}).
 %%
@@ -120,6 +123,9 @@ get_permanent_crashed_nodes(MIL) ->
 -spec(start() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start() ->
+  gen_server:start({global,mil}, ?MODULE, [], []).
+
+start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
 -spec(init(Args :: term()) ->
@@ -343,7 +349,8 @@ handle_cast(Msg, State) ->
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.
 
-terminate(_Reason, _State = #state{}) ->
+terminate(Reason, _State = #state{}) ->
+  io:format("[MIL] Terminating. Reason: ~p~n", [Reason]),
   ok.
 
 code_change(_OldVsn, State = #state{}, _Extra) ->

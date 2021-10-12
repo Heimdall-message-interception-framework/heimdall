@@ -3,7 +3,7 @@
 -include("test_engine_types.hrl").
 -include("observer_events.hrl").
 
--export([init/1, handle_call/3, handle_cast/2, explore/3, explore/6]).
+-export([init/1, handle_call/3, handle_cast/2, terminate/2, explore/3, explore/6]).
 
 % a run consists of an id and a history
 -type run() :: {pos_integer(), history()}.
@@ -57,19 +57,23 @@ handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _F
 handle_call(_Msg,_From, State) ->
     {reply, ok, State}.
 
+terminate(Reason, _State) ->
+    io:format("[Test Engine] Terminating. Reason: ~p~n", [Reason]),
+    ok.
 %%% internal functions
 % perform a single exploration run
 -spec explore1(atom(), maps:map(), [#abstract_instruction{}], integer(), #state{}) -> history().
 explore1(SUTModule, Config, MILInstructions, Length, State) ->
+    %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
     % start MIL 
     {ok, MIL} = message_interception_layer:start(),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     
     % create observer manager
-    {ok, ObsManager} = gen_event:start_link({global, om}),
+    {ok, ObsManager} = gen_event:start({global, om}),
 
     % start SUTModule
-    {ok, SUTModRef} = SUTModule:start_link(Config),
+    {ok, SUTModRef} = SUTModule:start(Config),
 
     % start observers
     Observers = SUTModule:get_observers(),
@@ -78,12 +82,14 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
 
     % bootstrap application
     SUTModule = State#state.sut_module,
-    SUTModule:bootstrap(Config),
-    
+    SUTModule:bootstrap(),
+
     % gen sequence of steps
     Steps = lists:seq(0, Length-1),
     % get scheduler
     Scheduler = State#state.scheduler,
+
+    InitialHistory = [{init, collect_state(MIL, Observers)}],
     % per step: choose instruction, execute and collect result
     Run = lists:foldl(fun(_Step, History) ->
             % ask scheduler for next concrete instruction
@@ -92,7 +98,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
             ProgState = collect_state(MIL, Observers),
 
             [{NextInstr, ProgState} | History] end,
-        [], Steps),
+        InitialHistory, Steps),
     
     % clean MIL, Observer Manager and SUT Module
     gen_server:stop(MIL),
@@ -116,6 +122,6 @@ collect_state(MIL, Observers) ->
         commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
         timeouts = message_interception_layer:get_timeouts(MIL),
         nodes = message_interception_layer:get_all_node_names(MIL),
-        crashed = message_interception_layer:get_transient_crashed_nodes(MIL)
+        crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL))
         % TODO: support permanent crashes
     }.

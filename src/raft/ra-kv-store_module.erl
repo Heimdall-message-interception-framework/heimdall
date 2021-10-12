@@ -4,7 +4,7 @@
 -include("test_engine_types.hrl").
 
 -export([bootstrap/0, bootstrap/1, get_instructions/0, get_observers/0, generate_instruction/1, generate_instruction/2]).
--export([start_link/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([start/1, start_link/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
     names = undefined :: [atom()] | undefined,
@@ -12,7 +12,12 @@
 }).
 
 %%% API
--spec start_link(_) -> 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
+
+-spec start(_) -> 'ignore' | {'error', _} | {'ok', pid()}.
+start(Config) ->
+    gen_server:start({local, 'ra-kv-store_module'}, ?MODULE, [Config], []).
+
+-spec start_link(_) -> 'ignore' | {'error', _} | {'ok', pid()}.
 start_link(Config) ->
     gen_server:start_link({local, 'ra-kv-store_module'}, ?MODULE, [Config], []).
 

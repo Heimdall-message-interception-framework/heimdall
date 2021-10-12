@@ -24,7 +24,10 @@ end_per_testcase(_, Config) ->
 
 test_module(InitialConfig) ->
     % bc_module:bootstrap(),
+    % start ObserverManager and MIL
+    {ok, OM} = gen_event:start({global,om}),
     {ok, MIL} = message_interception_layer:start(),
+    Monitor = erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
@@ -36,15 +39,25 @@ test_module(InitialConfig) ->
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
     
-    process_flag(trap_exit, true),
-    gen_server:stop(BCMod).
-    % gen_server:stop({global,mil}).
+    % check if our monitors report anything
+    receive Msg ->
+      io:format("Received: ~p~n", [Msg])
+    after 0 ->
+      ok
+    end,
 
-test_engine(_Config) ->
+    % kill other processes
+    gen_server:stop(MIL),
+    gen_event:stop(OM).
+    % process_flag(trap_exit, true).
+
+test_engine(InitialConfig) ->
   {ok, Engine} = gen_server:start_link(test_engine, [bc_module, scheduler_random], []),
-  MILInstructions = [#abstract_instruction{}],
-  Runs = test_engine:explore(Engine, bc_module, maps:from_list(_Config),
-                             MILInstructions, 5, 3),
+  MILInstructions = [],
+  Conf = maps:from_list([{num_processes, 2}, {bc_type, best_effort_broadcast_paper}]
+        ++ InitialConfig),
+  Runs = test_engine:explore(Engine, bc_module, Conf,
+                             MILInstructions, 100, 5),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 
 

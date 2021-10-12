@@ -30,6 +30,7 @@
 %% added typing from dialyzer but where does {_, _} come from?
 -spec choose_instruction(MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
 choose_instruction(MIL, SUTModule, SchedInstructions, History) ->
+  %io:format("[~p] Choosing Instruction, History is: ~p~n", [?MODULE, History]),
   #prog_state{commands_in_transit = CommInTransit,
           timeouts = Timeouts,
           nodes = Nodes,
@@ -38,9 +39,10 @@ choose_instruction(MIL, SUTModule, SchedInstructions, History) ->
   Result = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed),
   Result.
 
-
 -spec getLastStateOfHistory(history()) -> #prog_state{}.
-getLastStateOfHistory([{_, State} | _Tail]) ->
+getLastStateOfHistory([]) ->
+  #prog_state{};
+getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
   State.
 
 
@@ -81,12 +83,12 @@ produce_sched_instruction(MIL, _SchedInstructions, CommInTransit) when CommInTra
       ArgsWithMIL = [MIL | Args],
       #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL};
     duplicate ->  % always choose the first command
-      [{Command, _} | _] = CommInTransit,
+      [Command | _] = CommInTransit,
       Args = get_args_from_command_for_mil(Command),
       ArgsWithMIL = [MIL | Args],
       #instruction{module = message_interception_layer, function = duplicate_msg_command, args = ArgsWithMIL};
     drop -> % always choose the first command
-      [{Command, _} | _] = CommInTransit,
+      [Command  | _] = CommInTransit,
       Args = get_args_from_command_for_mil(Command),
       ArgsWithMIL = [MIL | Args],
       #instruction{module = message_interception_layer, function = drop_msg_command, args = ArgsWithMIL}
@@ -158,7 +160,7 @@ choose_from_list(List) ->
   choose_from_list(List, 5).
 choose_from_list(List, Trials) when Trials == 0 ->
 %%  pick first; possible since the list cannot be empty
-  [{Element, _} | _] = List,
+  [Element | _] = List,
   Element;
 choose_from_list(List, Trials) when Trials > 0 ->
   HelperFunction = fun(X, Acc) ->
@@ -167,7 +169,8 @@ choose_from_list(List, Trials) when Trials > 0 ->
                     case RandomNumber < 3 of
                       true -> X;
                       false -> undefined
-                    end
+                    end;
+      Cmd       -> Cmd
     end
     end,
   MaybeElement = lists:foldl(HelperFunction, undefined, List),

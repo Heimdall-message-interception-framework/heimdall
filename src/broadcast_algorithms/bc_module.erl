@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
 
--export([generate_instruction/2, bootstrap/1, start_link/1, bootstrap/0, get_instructions/0, get_observers/0, generate_instruction/1]).
+-export([generate_instruction/2, bootstrap/1, start/1, start_link/1, bootstrap/0, get_instructions/0, get_observers/0, generate_instruction/1]).
 -export([init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
@@ -12,26 +12,30 @@
                  bc_pids :: undefined | [pid()]}).
 
 %%% API
--spec start_link(_) -> 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
+-spec start_link(_) -> {'ok', pid()}.
 start_link(Config) ->
-    gen_server:start_link({local, bc_module}, ?MODULE, [Config], []).
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [Config], []).
+
+start(Config) ->
+    gen_server:start({local, ?MODULE}, ?MODULE, [Config], []).
 
 get_instructions() ->
-    gen_server:call(bc_module, get_instructions).
+    gen_server:call(?MODULE, get_instructions).
 
 get_observers() -> [agreement, causal_delivery, no_creation, no_duplications, validity].
 
 bootstrap() ->
-    gen_server:call(bc_module, bootstrap).
+    gen_server:call(?MODULE, bootstrap).
 bootstrap(Pid) ->
     gen_server:call(Pid, bootstrap).
 generate_instruction(AbstrInstruction) ->
-    gen_server:call(bc_module, {generate_instruction, AbstrInstruction}).
+    gen_server:call(?MODULE, {generate_instruction, AbstrInstruction}).
 generate_instruction(Pid, AbstrInstruction) ->
     gen_server:call(Pid, {generate_instruction, AbstrInstruction}).
 
 %%% gen server callbacks
 init([Config]) ->
+    io:format("[~p] starting with config: ~p~n",[?MODULE, Config]),
     {ok, #state{
         num_processes = maps:get(num_processes, Config, 3),
         dlv_to = maps:get(dlv_to, Config, self()),
@@ -70,5 +74,5 @@ handle_cast(_Req, _State) ->
 
 
 terminate(Reason, _State) ->
-    io:format("Terminating. Reason: ~p~n", [Reason]),
+    io:format("[BC_Module] Terminating. Reason: ~p~n", [Reason]),
     ok.

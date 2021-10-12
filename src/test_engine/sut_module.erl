@@ -4,7 +4,8 @@
 -include("test_engine_types.hrl").
 
 % behaviour callbacks
--callback start_link(Config :: any()) -> {ok, pid()}.
+-callback start_link(Config :: any()) -> 'ignore' | {'error', _} | {'ok', pid()}.
+-callback start(Config :: any()) -> 'ignore' | {'error', _} | {'ok', pid()}.
 -callback bootstrap() -> any().
 -callback generate_instruction(AbstrInstruction ::#abstract_instruction{}) -> #instruction{}.
 -callback get_instructions() -> [#abstract_instruction{}].

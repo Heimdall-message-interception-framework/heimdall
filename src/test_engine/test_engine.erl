@@ -3,7 +3,7 @@
 -include("test_engine_types.hrl").
 -include("observer_events.hrl").
 
--export([init/1, handle_call/3, handle_cast/2, terminate/2, explore/3, explore/6]).
+-export([init/1, handle_call/3, handle_cast/2, terminate/2, explore/3, explore/6, explore/7]).
 
 % a run consists of an id and a history
 -type run() :: {pos_integer(), history()}.
@@ -30,6 +30,10 @@
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length) ->
     gen_server:call(TestEngine,
         {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}).
+-spec explore(pid(), atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer(), pos_integer() | infinity) -> [{pos_integer(), history()}].
+explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout) ->
+    gen_server:call(TestEngine,
+        {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, Timeout).
 explore(TestEngine, NumRuns, Length) ->
     undefined.
 
@@ -54,8 +58,9 @@ handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _F
         runs = Runs ++ State#state.runs,
         next_id = State#state.next_id + NumRuns
     }};
-handle_call(_Msg,_From, State) ->
-    {reply, ok, State}.
+handle_call(Msg,_From, State) ->
+    erlang:error("[~p] unhandled call ~p from ~p", [?MODULE, Msg]),
+    {stop, unhandled_call, State}.
 
 terminate(Reason, _State) ->
     io:format("[Test Engine] Terminating. Reason: ~p~n", [Reason]),
@@ -94,7 +99,9 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     Run = lists:foldl(fun(_Step, History) ->
             % ask scheduler for next concrete instruction
             NextInstr = Scheduler:choose_instruction(MIL, SUTModule, MILInstructions, History),
-            run_instruction(NextInstr, State),
+            % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
+            ok = run_instruction(NextInstr, State),
+            % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
             ProgState = collect_state(MIL, Observers),
 
             [{NextInstr, ProgState} | History] end,

@@ -43,14 +43,14 @@
 
 %% registration of processes
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
-  gen_server:cast(MIL, {register, {Name, Identifier, Kind}}).
+  gen_server:call(MIL, {register, {Name, Identifier, Kind}}).
 
 %% msg_commands
 msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
 %%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
   msg_command(MIL, From, To, Module, Fun, Args);
 msg_command(MIL, From, To, Module, Fun, Args) ->
-  gen_server:cast(MIL, {msg_cmd, {From, To, Module, Fun, Args}}).
+  gen_server:call(MIL, {msg_cmd, {From, To, Module, Fun, Args}}).
 
 %% timeouts
 enable_timeout(MIL, Time, Dest, Msg) ->
@@ -72,29 +72,29 @@ exec_msg_command(MIL, ID, From, To, _Module, _Fun, _Args) ->
   exec_msg_command(MIL, ID, From, To).
 %%
 exec_msg_command(MIL, ID, From, To) ->
-  gen_server:cast(MIL, {exec_msg_cmd, {ID, From, To}}).
+  gen_server:call(MIL, {exec_msg_cmd, {ID, From, To}}).
 %%
 duplicate_msg_command(MIL, ID, From, To) ->
-  gen_server:cast(MIL, {duplicate, {ID, From, To}}).
+  gen_server:call(MIL, {duplicate, {ID, From, To}}).
 %%
 alter_msg_command(MIL, Id, From, To, NewArgs) ->
-  gen_server:cast(MIL, {send_altered, {Id, From, To, NewArgs}}).
+  gen_server:call(MIL, {send_altered, {Id, From, To, NewArgs}}).
 %%
 drop_msg_command(MIL, Id, From, To) ->
-  gen_server:cast(MIL, {drop, {Id, From, To}}).
+  gen_server:call(MIL, {drop, {Id, From, To}}).
 %%
 fire_timeout(MIL, Proc, TimerRef) ->
   Result = gen_server:call(MIL, {fire_to, {Proc, TimerRef}}),
   Result.
 %%
 transient_crash(MIL, Name) ->
-  gen_server:cast(MIL, {crash_trans, {Name}}).
+  ok = gen_server:call(MIL, {crash_trans, {Name}}).
 %%
 permanent_crash(MIL, Name) ->
-  gen_server:cast(MIL, {crash_perm, {Name}}).
+  gen_server:call(MIL, {crash_perm, {Name}}).
 %%
 rejoin(MIL, Name) ->
-  gen_server:cast(MIL, {rejoin, {Name}}).
+  gen_server:call(MIL, {rejoin, {Name}}).
 
 %% GETTER
 %%
@@ -203,17 +203,12 @@ handle_call({get_all_node_names}, _From, #state{} = State) ->
 %%
 handle_call({get_timeouts}, _From, State = #state{}) ->
   {reply, State#state.enabled_timeouts, State};
+% -spec(handle_cast(Request :: term(), State :: #state{}) ->
+%   {noreply, NewState :: #state{}} |
+%   {noreply, NewState :: #state{}, timeout() | hibernate} |
+%   {stop, Reason :: term(), NewState :: #state{}}).
 %%
-handle_call(_Request, _From, State) ->
-  erlang:throw(["unhandled call", _Request]),
-  {reply, ok, State}.
-
--spec(handle_cast(Request :: term(), State :: #state{}) ->
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), NewState :: #state{}}).
-%%
-handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
+handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
   NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
   NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names_from_state(State),
@@ -225,12 +220,11 @@ handle_cast({register, {NodeName, NodePid, NodeClass}}, State = #state{}) ->
   SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeName, class = NodeClass},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{registered_nodes_pid = NewRegisteredNodesPid,
+  {reply, ok, State#state{registered_nodes_pid = NewRegisteredNodesPid,
                         registered_pid_nodes = NewRegisteredPidNodes,
                         map_commands_in_transit = NewCommandStore,
                         id_counter = NextId}};
-%%
-handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
+handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State = #state{})
   when not is_tuple(ToPid)->
   From = pid_to_node(State, FromPid),
   To = case is_pid(ToPid) of
@@ -245,7 +239,7 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
         from = From, to = To, mod = Module, func = Fun, args = Args},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
-      {noreply, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
+      {reply, ok, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
 %%    Bool_whitelisted -> do_exec_cmd(Module, Fun, Args),
 %%      {noreply, State};
     true ->
@@ -260,12 +254,13 @@ handle_cast({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, State = #state{})
         from = From, to = To, mod = Module, func = Fun, args = Args},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
-      {noreply, State#state{map_commands_in_transit = UpdatedCommandsInTransit,
+      {reply, ok, State#state{map_commands_in_transit = UpdatedCommandsInTransit,
         list_commands_in_transit = UpdatedListCommandsInTransit,
         id_counter = NextID}}
   end;
 %%
-handle_cast({exec_msg_cmd, {Id, From, To}}, State = #state{}) ->
+handle_call({exec_msg_cmd, {Id, From, To}}, _From, State = #state{}) ->
+  % io:format("[~p] exec_msg_cmd {~p, ~p, ~p}", [?MODULE, Id, From, To]),
   {Mod, Func, Args, Skipped, NewCommandStore} = find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, Args),
   SchedEvent = #sched_event{what = exec_msg_cmd, id = Id,
@@ -273,9 +268,10 @@ handle_cast({exec_msg_cmd, {Id, From, To}}, State = #state{}) ->
     mod = Mod, func = Func, args = Args},
   msg_interception_helpers:submit_sched_event(SchedEvent),
   NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
-  {noreply, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
+  {reply, ok, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
-handle_cast({duplicate, {Id, From, To}}, State = #state{}) ->
+handle_call({duplicate, {Id, From, To}}, _From, State = #state{}) ->
+  % io:format("[~p] duplicate {~p, ~p, ~p}", [?MODULE, Id, From, To]),
   {Mod, Func, Args, Skipped, _NewCommandStore} =
       find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, Args),
@@ -283,9 +279,10 @@ handle_cast({duplicate, {Id, From, To}}, State = #state{}) ->
                             mod = Mod, func = Func, args = Args, skipped = Skipped},
   msg_interception_helpers:submit_sched_event(SchedEvent),
 %%  we do not update state since we duplicate
-  {noreply, State};
+  {reply, ok, State};
 %%
-handle_cast({send_altered, {Id, From, To, NewArgs}}, State = #state{}) ->
+handle_call({send_altered, {Id, From, To, NewArgs}}, _From, State = #state{}) ->
+  % io:format("[~p] send_altered {~p, ~p, ~p}", [?MODULE, Id, From, To]),
   {Mod, Func, _Args, Skipped, NewCommandStore} =
     find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   do_exec_cmd(Mod, Func, NewArgs),
@@ -293,37 +290,43 @@ handle_cast({send_altered, {Id, From, To, NewArgs}}, State = #state{}) ->
     mod = Mod, func = Func, args = NewArgs, skipped = Skipped},
   msg_interception_helpers:submit_sched_event(SchedEvent),
   NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
-  {noreply, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
+  {reply, ok, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
-handle_cast({drop, {Id, From, To}}, State = #state{}) ->
+handle_call({drop, {Id, From, To}}, _From, State = #state{}) ->
+  % io:format("[~p] drop {~p, ~p, ~p}", [?MODULE, Id, From, To]),
   {Mod, Func, Args, Skipped, NewCommandStore} =
     find_cmd_and_get_updated_commands_in_transit(State, Id, From, To),
   SchedEvent = #sched_event{what = drop_msg, id = Id, from = From, to = To, mod = Mod, func = Func, args = Args, skipped = Skipped},
   msg_interception_helpers:submit_sched_event(SchedEvent),
   NewListCommand = lists:filter(fun({Idx, _, _, _, _, _}) -> Idx /= Id end, State#state.list_commands_in_transit),
-  {noreply, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
+  {reply, ok, State#state{map_commands_in_transit = NewCommandStore, list_commands_in_transit = NewListCommand}};
 %%
-handle_cast({crash_trans, {NodeName}}, State = #state{}) ->
+handle_call({crash_trans, {NodeName}}, _From, State = #state{}) ->
+  % io:format("[~p] crash_trans. commands in transit: ~p", [?MODULE, State#state.map_commands_in_transit]),
   UpdatedCrashTrans = sets:add_element(NodeName, State#state.transient_crashed_nodes),
   ListQueuesToEmpty = [{Other, NodeName} || Other <- get_all_node_names_from_state(State), Other /= NodeName],
   NewCommandsStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
               State#state.map_commands_in_transit,
               ListQueuesToEmpty),
+  % io:format("[~p] crash_trans. new commands in transit: ~p", [?MODULE, NewCommandsStore]),
   SchedEvent = #sched_event{what = trns_crs, id = State#state.id_counter, name = NodeName},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans,
+  % TODO: is this correct?
+  NewListCommand = lists:filter(fun({_, From, To, _, _, _}) -> (From =/= NodeName) and (To =/= NodeName) end, State#state.list_commands_in_transit),
+  {reply, ok, State#state{transient_crashed_nodes = UpdatedCrashTrans,
                         map_commands_in_transit = NewCommandsStore,
+                        list_commands_in_transit = NewListCommand,
                         id_counter = NextId}};
 %%
-handle_cast({rejoin, {NodeName}}, State = #state{}) ->
+handle_call({rejoin, {NodeName}}, _From, State = #state{}) ->
 %%  for transient crashes only
   UpdatedCrashTrans = sets:del_element(NodeName, State#state.transient_crashed_nodes),
   SchedEvent = #sched_event{what = rejoin, id = State#state.id_counter, name = NodeName},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{transient_crashed_nodes = UpdatedCrashTrans, id_counter = NextId}};
-handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
+  {reply, ok, State#state{transient_crashed_nodes = UpdatedCrashTrans, id_counter = NextId}};
+handle_call({crash_perm, {NodeName}}, _From, State = #state{}) ->
 %%  we keep the outgoing channels since these are messages that were sent before (still scheduable)
   UpdatedCrashPerm = sets:add_element(NodeName, State#state.permanent_crashed_nodes),
   ListQueuesToDelete = [{Other, NodeName} || Other <- get_all_node_names_from_state(State), Other /= NodeName],
@@ -333,9 +336,12 @@ handle_cast({crash_perm, {NodeName}}, State = #state{}) ->
   SchedEvent = #sched_event{what = perm_crs, id = State#state.id_counter, name = NodeName},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {noreply, State#state{permanent_crashed_nodes = UpdatedCrashPerm,
+  {reply, ok, State#state{permanent_crashed_nodes = UpdatedCrashPerm,
                         map_commands_in_transit = NewCommandStore,
                         id_counter = NextId}};
+handle_call(_Request, _From, State) ->
+  erlang:throw(["unhandled call", _Request]),
+  {reply, ok, State}.
 %%
 handle_cast(Msg, State) ->
   io:format("[cb] received unhandled cast: ~p~n", [Msg]),
@@ -389,6 +395,7 @@ find_cmd_id_in_queue(QueueToSearch, Id) ->
   find_cmd_id_in_queue([], QueueToSearch, Id).
 
 find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
+  % io:format("[~p] trying to find cmd_id ~p in queue ~p", [?MODULE, Id, TailQueueToSearch]),
   Result = queue:out(TailQueueToSearch),
   {{value, {CurrentId, Mod, Func, Args}}, NewTailQueueToSearch} = Result,
   case CurrentId == Id  of

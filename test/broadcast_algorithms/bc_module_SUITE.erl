@@ -27,7 +27,7 @@ test_module(InitialConfig) ->
     % start ObserverManager and MIL
     {ok, OM} = gen_event:start({global,om}),
     {ok, MIL} = message_interception_layer:start(),
-    Monitor = erlang:monitor(process, MIL),
+    erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
@@ -56,8 +56,9 @@ test_engine(InitialConfig) ->
   MILInstructions = [],
   Conf = maps:from_list([{num_processes, 2}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
+  Timeout = 20000,
   Runs = test_engine:explore(Engine, bc_module, Conf,
-                             MILInstructions, 100, 5),
+                             MILInstructions, 100, 5, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 
 

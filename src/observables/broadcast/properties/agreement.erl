@@ -85,7 +85,7 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
     {ok, check_agreement(Msg, Proc, 
         State#state{delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p)})};
 handle_event(Event, State) ->
-    io:format("[agreement_prop] received unhandled event: ~p~n", [Event]),
+    % io:format("[agreement_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.

@@ -47,24 +47,24 @@ init(_) ->
 % handles delivered messages
 -spec handle_event(_, #state{}) -> {'ok', #state{}}.
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
-    io:format("Received broadcast event: ~p, ~p", [Proc,Msg]),
+    % io:format("Received broadcast event: ~p, ~p", [Proc,Msg]),
     % calculate vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
     NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
-    io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
+    % io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
 
     % update vc of process and set vc of message
     {ok, State#state{
             vc_p = maps:put(Proc, NewVC, State#state.vc_p),
             vc_m = maps:put(Msg, NewVC, State#state.vc_m)}};
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
-    io:format("Received delivered event: ~p, ~p", [Proc,Msg]),
+    % io:format("Received delivered event: ~p, ~p", [Proc,Msg]),
     % add message to set of delivered messages
     NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
     % update vectorclock of process
     OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
     NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
-    io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
+    % io:format("PVCs: ~p, MVCs: ~p~n", [maps:put(Proc, NewVC, State#state.vc_p), maps:put(Msg, NewVC, State#state.vc_m)]),
 
     % get or update vectorclock of the delivered message
     MsgVC = maps:get(Msg, State#state.vc_m, NewVC),

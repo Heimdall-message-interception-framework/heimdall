@@ -65,6 +65,8 @@ init_per_testcase(TestCase, Config) ->
   Config.
 
 end_per_testcase(_, Config) ->
+  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
+  gen_server:stop(MIL),
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),
   Config.

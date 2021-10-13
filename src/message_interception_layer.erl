@@ -313,7 +313,9 @@ handle_call({crash_trans, {NodeName}}, _From, State = #state{}) ->
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
   % TODO: is this correct?
-  NewListCommand = lists:filter(fun({_, From, To, _, _, _}) -> (From =/= NodeName) and (To =/= NodeName) end, State#state.list_commands_in_transit),
+  % I think the condition would need to be (not [From =/= NodeName and To == NodeName])
+  % since we do only remove messages going to the crashing process, not the ones from it (has already been sent)
+  NewListCommand = lists:filter(fun({_, From, To, _, _, _}) -> (From == NodeName) or (To =/= NodeName) end, State#state.list_commands_in_transit),
   {reply, ok, State#state{transient_crashed_nodes = UpdatedCrashTrans,
                         map_commands_in_transit = NewCommandsStore,
                         list_commands_in_transit = NewListCommand,

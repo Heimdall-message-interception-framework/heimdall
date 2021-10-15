@@ -20,31 +20,56 @@
 -define(ShareMsgCmdDup, 1).
 -define(ShareMsgCmdDrop, 1).
 
+-record(state, {}).
+
 -type kind_of_instruction() :: sut_instruction | sched_instruction | timeout_instruction | node_connection_instruction.
 -type kind_of_sched_instruction() :: execute | duplicate | drop.
 
-%% API
--export([choose_instruction/4, get_kind_of_instruction/0]).
+-export([start_link/1, start/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([choose_instruction/5]).
 
-%%-spec choose_instruction(any(), [#instruction{}], [#instruction{}], history()) -> #instruction{}.
-%% added typing from dialyzer but where does {_, _} come from?
--spec choose_instruction(MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(MIL, SUTModule, SchedInstructions, History) ->
+%%% API
+-spec start_link(_) -> {'ok', pid()}.
+start_link(Config) ->
+  gen_server:start_link({local, ?MODULE}, ?MODULE, [Config], []).
+
+start(Config) ->
+  gen_server:start({local, ?MODULE}, ?MODULE, [Config], []).
+
+-spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
   %io:format("[~p] Choosing Instruction, History is: ~p~n", [?MODULE, History]),
+  gen_server:call(Scheduler, {choose_instruction, MIL, SUTModule, SchedInstructions, History}).
+
+%% gen_server callbacks
+
+init([_Config]) ->
+  {ok, #state{}}.
+
+handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _From, State = #state{}) ->
   #prog_state{commands_in_transit = CommInTransit,
-          timeouts = Timeouts,
-          nodes = Nodes,
-          crashed = Crashed} = getLastStateOfHistory(History),
-%%  we sample a number within the sum of all shares
+    timeouts = Timeouts,
+    nodes = Nodes,
+    crashed = Crashed} = getLastStateOfHistory(History),
   Result = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed),
-  Result.
+  {reply, Result, State};
+handle_call(_Request, _From, State = #state{}) ->
+  erlang:throw("unhandled call"),
+  {reply, ok, State}.
+
+handle_cast(_Request, State = #state{}) ->
+  {noreply, State}.
+
+terminate(_Reason, _State = #state{}) ->
+  ok.
+
+%% internal functions
 
 -spec getLastStateOfHistory(history()) -> #prog_state{}.
 getLastStateOfHistory([]) ->
   #prog_state{};
 getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
   State.
-
 
 -spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _) -> #instruction{}.
 get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed) ->

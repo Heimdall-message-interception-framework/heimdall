@@ -80,6 +80,9 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     % start SUTModule
     {ok, SUTModRef} = SUTModule:start(Config),
 
+    % start scheduler
+    {ok, Scheduler} = (State#state.scheduler):start(Config),
+
     % start observers
     Observers = SUTModule:get_observers(),
     lists:foreach(fun(Obs) -> gen_event:add_handler({global, om}, Obs, []) end,
@@ -91,14 +94,12 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
 
     % gen sequence of steps
     Steps = lists:seq(0, Length-1),
-    % get scheduler
-    Scheduler = State#state.scheduler,
 
     InitialHistory = [{init, collect_state(MIL, Observers)}],
     % per step: choose instruction, execute and collect result
     Run = lists:foldl(fun(_Step, History) ->
             % ask scheduler for next concrete instruction
-            NextInstr = Scheduler:choose_instruction(MIL, SUTModule, MILInstructions, History),
+            NextInstr = (State#state.scheduler):choose_instruction(Scheduler, MIL, SUTModule, MILInstructions, History),
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
             ok = run_instruction(NextInstr, State),
             % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
@@ -107,10 +108,11 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
             [{NextInstr, ProgState} | History] end,
         InitialHistory, Steps),
     
-    % clean MIL, Observer Manager and SUT Module
+    % clean MIL, Observer Manager, SUT Module and Scheduler
     gen_server:stop(MIL),
     gen_event:stop(ObsManager),
     gen_server:stop(SUTModRef),
+    gen_server:stop(Scheduler),
     % return run
     Run.
 

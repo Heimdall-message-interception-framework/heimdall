@@ -16,10 +16,10 @@ groups() -> [
         [no_crash_test, with_crash_test, causal_ordering_test]
     },
     {rb_tests,
-        [no_crash_test, with_crash_test, causal_ordering_test]
+        [no_crash_test, with_crash_test]
     },
     {be_tests,
-        [no_crash_test, with_crash_test, causal_ordering_test]
+        [no_crash_test, with_crash_test]
     }
 ].
 
@@ -110,7 +110,7 @@ no_crash_test(Config) ->
     receive {Chat1, ok} -> ok end,
 
     % finish exchanging messages
-    timer:sleep(200),
+    timer:sleep(1000),
 
     % check that all chat-servers got the message:
     Chat1 ! {get_received, self()},
@@ -147,7 +147,7 @@ with_crash_test(Config) ->
     receive {Chat1, ok} -> ok end,
 
     % wait for messages to be delivered
-    timer:sleep(100),
+    timer:sleep(1000),
 
     Chat1 ! {get_received, self()},
     Chat3 ! {get_received, self()},

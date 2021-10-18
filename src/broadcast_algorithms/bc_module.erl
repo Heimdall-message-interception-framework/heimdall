@@ -7,9 +7,11 @@
 -export([init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
+                 instruction_counter = 0 :: 0 | pos_integer(),
                  dlv_to :: pid(),
                  bc_type = causal_broadcast :: atom(),
-                 bc_pids :: undefined | [pid()]}).
+                 bc_pids :: undefined | [pid()],
+                 observers :: [atom()]}).
 
 %%% API
 -spec start_link(_) -> {'ok', pid()}.
@@ -22,7 +24,8 @@ start(Config) ->
 get_instructions() ->
     gen_server:call(?MODULE, get_instructions).
 
-get_observers() -> [agreement, causal_delivery, no_creation, no_duplications, validity].
+get_observers() ->
+    gen_server:call(?MODULE, get_observers).
 
 bootstrap() ->
     gen_server:call(?MODULE, bootstrap).
@@ -39,7 +42,9 @@ init([Config]) ->
     {ok, #state{
         num_processes = maps:get(num_processes, Config, 3),
         dlv_to = maps:get(dlv_to, Config, self()),
-        bc_type = maps:get(bc_type, Config, causal_broadcast)
+        bc_type = maps:get(bc_type, Config, causal_broadcast),
+        observers = maps:get(observers, Config,
+            [agreement, causal_delivery, no_creation, no_duplications, validity])
     }}.
 
 handle_call(bootstrap, _From, State) ->
@@ -62,8 +67,10 @@ handle_call({generate_instruction, #abstract_instruction{function = broadcast}},
     BC = lists:nth(rand:uniform(length(BC_Pids)), BC_Pids),
 
     Module = State#state.bc_type,
-    Instr = #instruction{module = Module, function = broadcast, args = [BC, "Hello World!"]},
-    {reply, Instr, State};
+    Instr = #instruction{module = Module, function = broadcast, args = [BC, "Hello World! #" ++ integer_to_list(State#state.instruction_counter)]},
+    {reply, Instr, State#state{instruction_counter = State#state.instruction_counter + 1}};
+handle_call(get_observers, _From, State) ->
+    {reply, State#state.observers, State};
 handle_call(get_instructions, _From, State) ->
     Module = State#state.bc_type,
     Instructions = [#abstract_instruction{module = Module, function = broadcast}],

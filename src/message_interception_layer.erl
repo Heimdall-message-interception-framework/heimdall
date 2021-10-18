@@ -198,7 +198,8 @@ handle_call({get_permanent_crashed_nodes}, _From, #state{permanent_crashed_nodes
   {reply, PermanentCrashedNodes, State};
 %%
 handle_call({get_all_node_names}, _From, #state{} = State) ->
-  NodeNames = get_all_node_names_from_state(State),
+  NodeNames = orddict:to_list(State#state.registered_nodes_pid),
+  % NodeNames = get_all_node_names_from_state(State),
   {reply, NodeNames, State};
 %%
 handle_call({get_timeouts}, _From, State = #state{}) ->

@@ -54,10 +54,12 @@ test_module(InitialConfig) ->
 test_engine(InitialConfig) ->
   {ok, Engine} = gen_server:start_link(test_engine, [bc_module, scheduler_random], []),
   MILInstructions = [],
-  Conf = maps:from_list([{num_processes, 2}, {bc_type, best_effort_broadcast_paper}]
+  Conf = maps:from_list([{observers, [causal_delivery]},{num_processes, 2}, {bc_type, causal_broadcast}]
         ++ InitialConfig),
+  ListenTo = lists:map(fun(Id) -> "bc" ++ integer_to_list(Id) ++ "_be" end, lists:seq(0, maps:get(num_processes, Conf)-1)),
+  Conf2 = maps:put(listen_to, ListenTo, Conf),
   Timeout = 20000,
-  Runs = test_engine:explore(Engine, bc_module, Conf,
+  Runs = test_engine:explore(Engine, bc_module, Conf2,
                              MILInstructions, 100, 5, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 

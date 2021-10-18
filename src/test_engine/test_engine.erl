@@ -3,7 +3,7 @@
 -include("test_engine_types.hrl").
 -include("observer_events.hrl").
 
--export([init/1, handle_call/3, handle_cast/2, terminate/2, explore/3, explore/6, explore/7]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, explore/3, explore/6, explore/7]).
 
 % a run consists of an id and a history
 -type run() :: {pos_integer(), history()}.
@@ -34,7 +34,7 @@ explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length) ->
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout) ->
     gen_server:call(TestEngine,
         {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, Timeout).
-explore(TestEngine, NumRuns, Length) ->
+explore(_TestEngine, _NumRuns, _Length) ->
     undefined.
 
 %% gen_server callbacks
@@ -49,7 +49,7 @@ handle_cast(_Msg, State) ->
 
 -spec handle_call({explore, _}, _, #state{}) -> {'reply', [{pos_integer(), history()}], #state{}}.
 handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _From, State) ->
-    RunIds = lists:seq(State#state.next_id, State#state.next_id+NumRuns),
+    RunIds = lists:seq(State#state.next_id, State#state.next_id+NumRuns-1),
     Runs = lists:foldl(
         fun(RunId, Acc) ->
             [{RunId, explore1(SUTModule, Config, MILInstructions, Length, State)} | Acc] end,
@@ -62,9 +62,14 @@ handle_call(Msg,_From, State) ->
     erlang:error("[~p] unhandled call ~p from ~p", [?MODULE, Msg]),
     {stop, unhandled_call, State}.
 
+handle_info(Info, State) ->
+    io:format("[~p] received info: ~p~n", [?MODULE, Info]),
+    {noreply, State}.
+
 terminate(Reason, _State) ->
     io:format("[Test Engine] Terminating. Reason: ~p~n", [Reason]),
     ok.
+
 %%% internal functions
 % perform a single exploration run
 -spec explore1(atom(), maps:map(), [#abstract_instruction{}], integer(), #state{}) -> history().
@@ -85,17 +90,16 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
 
     % start observers
     Observers = SUTModule:get_observers(),
-    lists:foreach(fun(Obs) -> gen_event:add_handler({global, om}, Obs, []) end,
+    lists:foreach(fun(Obs) -> gen_event:add_sup_handler({global, om}, Obs, [Config]) end,
         Observers),
 
     % bootstrap application
-    SUTModule = State#state.sut_module,
     SUTModule:bootstrap(),
 
     % gen sequence of steps
     Steps = lists:seq(0, Length-1),
 
-    InitialHistory = [{init, collect_state(MIL, Observers)}],
+    InitialHistory = [{init, collect_state(MIL)}],
     % per step: choose instruction, execute and collect result
     Run = lists:foldl(fun(_Step, History) ->
             % ask scheduler for next concrete instruction
@@ -103,7 +107,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
             ok = run_instruction(NextInstr, State),
             % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
-            ProgState = collect_state(MIL, Observers),
+            ProgState = collect_state(MIL),
 
             [{NextInstr, ProgState} | History] end,
         InitialHistory, Steps),
@@ -121,16 +125,27 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
     apply(Module, Function, Args),
     ok.
 
--spec collect_state(pid(), [atom()]) -> #prog_state{}.
-collect_state(MIL, Observers) ->
+-spec collect_state(pid()) -> #prog_state{}.
+collect_state(MIL) ->
+    Observers = gen_event:which_handlers({global,om}),
     % collect properties
-    % TODO: collect properties 
+    Properties = maps:from_list(lists:flatmap(fun(Obs) -> read_observer(Obs) end, Observers)),
 
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
     #prog_state{
+        properties = Properties,
         commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
         timeouts = message_interception_layer:get_timeouts(MIL),
         nodes = message_interception_layer:get_all_node_names(MIL),
         crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL))
         % TODO: support permanent crashes
     }.
+
+-spec read_observer(atom()) -> [{nonempty_string(), boolean()}].
+read_observer(Observer) ->
+    Result = gen_event:call({global,om}, Observer, get_result),
+    case Result of
+        Bool when (Bool =:= true) or (Bool =:= false) -> [{atom_to_list(Observer), Bool}];
+        Map -> lists:map(fun({Key,Val}) -> {atom_to_list(Observer) ++ "_" ++ Key, Val} end,
+            maps:to_list(Map))
+    end.

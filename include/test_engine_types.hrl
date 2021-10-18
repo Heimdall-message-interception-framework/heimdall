@@ -10,7 +10,7 @@
 }).
 
 -record(prog_state, {
-    properties = maps:new() :: #{atom() => boolean()},
+    properties = maps:new() :: #{nonempty_string() => boolean()},
     commands_in_transit = [] :: [any()], % should have command type
     timeouts = [] :: [any()], % timeout, assumed that is a tuple of {Proc, TimerRef, etc.} see MIL
     nodes = [] :: [any()], % process_identifier

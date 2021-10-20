@@ -76,10 +76,14 @@ get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts,
 %%  Crashed are the transient ones
   KindInstruction = get_kind_of_instruction(),
   NextInstruction = case KindInstruction of
-    sut_instruction -> produce_sut_instruction(SUTModule);
-    sched_instruction -> produce_sched_instruction(MIL, SchedInstructions, CommInTransit);
-    timeout_instruction -> produce_timeout_instruction(MIL, Timeouts);
-    node_connection_instruction -> produce_node_connection_instruction(MIL, Nodes, Crashed)
+    sut_instruction ->
+      produce_sut_instruction(SUTModule);
+    sched_instruction ->
+      produce_sched_instruction(MIL, SchedInstructions, CommInTransit);
+    timeout_instruction ->
+      produce_timeout_instruction(MIL, Timeouts);
+    node_connection_instruction ->
+      produce_node_connection_instruction(MIL, Nodes, Crashed)
   end,
 %%  in case we produced a kind which was not possible, we simply retry
 %%  TODO: improve this by checking first whether sched_instruction or timeout_instruction is possible
@@ -124,7 +128,7 @@ produce_timeout_instruction(_MIL, Timeouts) when Timeouts == [] ->
   undefined;
 produce_timeout_instruction(MIL, Timeouts) when Timeouts /= [] ->
   TimeoutToFire = choose_from_list(Timeouts), % we also prioritise the ones in front
-  {Proc, TimerRef, _} = TimeoutToFire,
+  {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
   Args = [MIL, Proc, TimerRef],
   #instruction{module = message_interception_layer, function = fire_timeout, args = Args}.
 

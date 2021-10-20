@@ -6,7 +6,9 @@
 % behaviour callbacks
 -callback start_link(Config :: any()) -> 'ignore' | {'error', _} | {'ok', pid()}.
 -callback start(Config :: any()) -> 'ignore' | {'error', _} | {'ok', pid()}.
--callback bootstrap() -> any().
+-callback bootstrap_wo_scheduler() -> any().
+-callback needs_bootstrap_w_scheduler() -> boolean().
+-callback bootstrap_w_scheduler(TestEngine :: pid()) -> boolean().
 -callback generate_instruction(AbstrInstruction ::#abstract_instruction{}) -> #instruction{}.
 -callback get_instructions() -> [#abstract_instruction{}].
 -callback get_observers() -> [atom()].

@@ -11,6 +11,7 @@
 -record(state, {
     runs = []:: [run()],
     next_id = 0 :: 0 | pos_integer(),
+    bootstrap_scheduler = undefined :: atom(),
     scheduler = undefined :: atom(),
     sut_module :: atom()
 }).
@@ -39,7 +40,10 @@ explore(_TestEngine, _NumRuns, _Length) ->
 
 %% gen_server callbacks
 init([SUTModule, Scheduler]) ->
+    init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
+init([SUTModule, Scheduler, BootstrapScheduler]) ->
     {ok,#state{
+        bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
         sut_module = SUTModule
     }}.
@@ -78,39 +82,52 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     % start MIL 
     {ok, MIL} = message_interception_layer:start(),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
-    
+
     % create observer manager
     {ok, ObsManager} = gen_event:start({global, om}),
 
     % start SUTModule
     {ok, SUTModRef} = SUTModule:start(Config),
 
-    % start scheduler
-    {ok, Scheduler} = (State#state.scheduler):start(Config),
-
     % start observers
     Observers = SUTModule:get_observers(),
     lists:foreach(fun(Obs) -> gen_event:add_sup_handler({global, om}, Obs, [Config]) end,
         Observers),
 
-    % bootstrap application
-    SUTModule:bootstrap(),
+    % register with MIL (currently acting as client for SUT_instructions)
+    message_interception_layer:register_with_name(MIL, test_engine, self(), test_engine),
+
+    % bootstrap application w/o scheduler
+    SUTModule:bootstrap_wo_scheduler(),
+
+    InitialHistory = [{init, collect_state(MIL)}],
+
+    % bootstrap application w/ scheduler if necessary
+    History = case SUTModule:needs_bootstrap_w_scheduler() of
+        true -> {ok, BootstrapScheduler} = (State#state.bootstrap_scheduler):start(Config),
+                CurrHistory = bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, InitialHistory, MIL, MILInstructions),
+                gen_server:stop(BootstrapScheduler),
+                CurrHistory;
+        false -> InitialHistory
+    end,
+
+    % start scheduler
+    {ok, Scheduler} = (State#state.scheduler):start(Config),
 
     % gen sequence of steps
     Steps = lists:seq(0, Length-1),
 
-    InitialHistory = [{init, collect_state(MIL)}],
     % per step: choose instruction, execute and collect result
     Run = lists:foldl(fun(_Step, History) ->
             % ask scheduler for next concrete instruction
             NextInstr = (State#state.scheduler):choose_instruction(Scheduler, MIL, SUTModule, MILInstructions, History),
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
-            ok = run_instruction(NextInstr, State),
+            ok = run_instruction(NextInstr, MIL, State),
             % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
             ProgState = collect_state(MIL),
 
             [{NextInstr, ProgState} | History] end,
-        InitialHistory, Steps),
+        History, Steps),
     
     % clean MIL, Observer Manager, SUT Module and Scheduler
     gen_server:stop(MIL),
@@ -120,9 +137,18 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     % return run
     Run.
 
--spec run_instruction(#instruction{}, #state{}) -> ok.
-run_instruction(#instruction{module = Module, function = Function, args = Args}, _State) ->
-    apply(Module, Function, Args),
+-spec run_instruction(#instruction{}, pid(), #state{}) -> ok.
+run_instruction(#instruction{module = Module, function = Function, args = Args}, MIL, _State) ->
+%%    only spawn new processes for instructions which not executed by MIL
+    case Module == message_interception_layer of
+        true -> apply(Module, Function, Args);
+        false ->
+            _Pid = spawn(fun() ->
+                message_interception_layer:register_with_name(MIL, "run_instr_proc" ++ erlang:now(), self(), run_instr_proc),
+                apply(Module, Function, Args)
+%%        TODO send result back
+                         end)
+    end,
     ok.
 
 -spec collect_state(pid()) -> #prog_state{}.
@@ -149,3 +175,32 @@ read_observer(Observer) ->
         Map -> lists:map(fun({Key,Val}) -> {atom_to_list(Observer) ++ "_" ++ Key, Val} end,
             maps:to_list(Map))
     end.
+
+
+%% does the bootstrapping with the according scheduler and returns initial part of history
+bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MIL, MILInstructions) ->
+%%    idea:
+%% - let SUTModule start the bootstrapping part which is needs instructions to be scheduled
+%%    in a process which notifies the TestEngine with result
+%% - in parallel, let TestEngine run the scheduled instructions and wait for notification
+    ReplyRef = SUTModule:bootstrap_w_scheduler(self()),
+    % per step: choose instruction, execute and collect result
+    bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions).
+
+bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions) ->
+    receive
+        {ReplyRef, _Result} ->
+%%            TODO: gen_event with Result after bootstrap with scheduler
+%%            return the History
+            History
+        after 0 ->
+            % ask scheduler for next concrete instruction
+            NextInstr = (State#state.bootstrap_scheduler):choose_instruction(BootstrapScheduler, MIL, SUTModule, MILInstructions, History),
+            % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
+            ok = run_instruction(NextInstr, MIL, State),
+            % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
+            ProgState = collect_state(MIL),
+            History1 = [{NextInstr, ProgState} | History],
+            bootstrap_w_scheduler_loop(ReplyRef, History1, State, BootstrapScheduler, MIL, SUTModule, MILInstructions)
+    end.
+

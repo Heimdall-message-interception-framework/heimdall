@@ -32,7 +32,7 @@ test_module(InitialConfig) ->
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
     {ok, BCMod} = bc_module:start_link(Conf),
-    bc_module:bootstrap(),
+    bc_module:bootstrap_wo_scheduler(),
     AbstrInst = #abstract_instruction{module = causal_broadcast, function = broadcast},
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),
     io:format("~p~n", [bc_module:generate_instruction(AbstrInst)]),

@@ -16,7 +16,7 @@
 %% API for SUT
 -export([register_with_name/4, msg_command/6, enable_timeout/4, disable_timeout/3, enable_timeout/5]).
 %% API for scheduling engine
--export([exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
+-export([no_op/1, exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
 %% Getters
 -export([get_commands_in_transit/1, get_timeouts/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1]).
 
@@ -59,14 +59,20 @@ enable_timeout(MIL, Time, Dest, Msg) ->
 enable_timeout(MIL, Time, Dest, Msg, _Options) ->
 %%  we assume that processes do only send timeouts to themselves and ignore Options
   TimerRef = gen_server:call(MIL, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
+%%  erlang:display(["enable_to", TimerRef]),
   TimerRef.
 %%
 disable_timeout(MIL, Proc, TimerRef) ->
+%%  TODO: currently, we do not really check if the timeout to disable is actually enabled,
+%% need to rearrange calls to API for this and ensure that disable is closer to enable and iff not fired
+%%  erlang:display(["disable_to", TimerRef]),
   Result = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
   Result.
 
 %% FOR SCHEDULING ENGINE
 %%
+no_op(_MIL) ->
+  ok.
 %% deprecated, use the one with 4 parameters
 exec_msg_command(MIL, ID, From, To, _Module, _Fun, _Args) ->
   exec_msg_command(MIL, ID, From, To).
@@ -84,6 +90,7 @@ drop_msg_command(MIL, Id, From, To) ->
   gen_server:call(MIL, {drop, {Id, From, To}}).
 %%
 fire_timeout(MIL, Proc, TimerRef) ->
+%%  erlang:display(["fire_to", TimerRef]),
   Result = gen_server:call(MIL, {fire_to, {Proc, TimerRef}}),
   Result.
 %%
@@ -171,22 +178,30 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
 %%
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
   Proc = pid_to_node(State, ProcPid),
-  {_TimeoutValue, NewEnabledTimeouts} = find_timeout_and_get_updated_ones(State, TimerRef),
-  SchedEvent = #sched_event{what = disable_to, id = State#state.id_counter, timerref = TimerRef,
-    from = Proc, to = Proc},
-  NextId = State#state.id_counter + 1,
-  msg_interception_helpers:submit_sched_event(SchedEvent),
-  {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts, id_counter = NextId}};
+  case find_timeout_and_get_updated_ones(State, TimerRef) of
+    {found, {_TimeoutValue, NewEnabledTimeouts}} ->
+      SchedEvent = #sched_event{what = disable_to, id = State#state.id_counter, timerref = TimerRef,
+        from = Proc, to = Proc},
+      NextId = State#state.id_counter + 1,
+      msg_interception_helpers:submit_sched_event(SchedEvent),
+      {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts, id_counter = NextId}};
+    {notfound, _} ->
+      {reply, false, State}
+  end;
 %%
 handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
-  {TimeoutValue, NewEnabledTimeouts} = find_timeout_and_get_updated_ones(State, TimerRef),
-  {TimerRef, _ID, Proc, _Time, Mod, Func, Args} = TimeoutValue,
-  erlang:apply(Mod, Func, Args),
-  SchedEvent = #sched_event{what = fire_to, id = State#state.id_counter,
-    from = Proc, to = Proc, timerref = TimerRef},
-  NextId = State#state.id_counter + 1,
-  msg_interception_helpers:submit_sched_event(SchedEvent),
-  {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts, id_counter = NextId}};
+  case find_timeout_and_get_updated_ones(State, TimerRef) of
+    {found, {TimeoutValue, NewEnabledTimeouts}} ->
+      {TimerRef, _ID, Proc, _Time, Mod, Func, Args} = TimeoutValue,
+      erlang:apply(Mod, Func, Args),
+      SchedEvent = #sched_event{what = fire_to, id = State#state.id_counter,
+        from = Proc, to = Proc, timerref = TimerRef},
+      NextId = State#state.id_counter + 1,
+      msg_interception_helpers:submit_sched_event(SchedEvent),
+      {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts, id_counter = NextId}};
+    {notfound, _} ->
+      erlang:throw("tried to fire disabled timeout")
+  end;
 %%
 handle_call({get_commands}, _From, State = #state{}) ->
   {reply, State#state.list_commands_in_transit, State};
@@ -411,7 +426,7 @@ find_timeout_and_get_updated_ones(#state{enabled_timeouts = EnabledTimeouts}, Ti
   FilterFunction = fun({TimerRef1,_ , _, _, _, _, _}) -> TimerRef == TimerRef1  end,
   {RetrievedTimeoutList, NewEnabledTimeouts} = lists:partition(FilterFunction, EnabledTimeouts),
   case RetrievedTimeoutList of
-    [RetrievedTimeout] -> {RetrievedTimeout, NewEnabledTimeouts};
-    [] -> erlang:throw("timeout was not found");
+    [RetrievedTimeout] -> {found, {RetrievedTimeout, NewEnabledTimeouts}};
+    [] -> {notfound, undefined};
     _ -> erlang:throw("multipled timeouts with the same timerref")
   end.

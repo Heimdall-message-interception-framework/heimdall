@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
 
--export([generate_instruction/2, bootstrap/1, start/1, start_link/1, bootstrap/0, get_instructions/0, get_observers/0, generate_instruction/1]).
+-export([generate_instruction/2, start/1, start_link/1, get_instructions/0, get_observers/0, generate_instruction/1, bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, needs_bootstrap_w_scheduler/0, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2]).
 -export([init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
@@ -27,10 +27,18 @@ get_instructions() ->
 get_observers() ->
     gen_server:call(?MODULE, get_observers).
 
-bootstrap() ->
-    gen_server:call(?MODULE, bootstrap).
-bootstrap(Pid) ->
-    gen_server:call(Pid, bootstrap).
+bootstrap_wo_scheduler() ->
+    gen_server:call(?MODULE, bootstrap_wo_scheduler).
+bootstrap_wo_scheduler(Pid) ->
+    gen_server:call(Pid, bootstrap_wo_scheduler).
+
+needs_bootstrap_w_scheduler() ->
+    false.
+
+bootstrap_w_scheduler(TestEngine) ->
+    gen_server:call(?MODULE, {bootstrap_w_scheduler, TestEngine}).
+bootstrap_w_scheduler(Pid, TestEngine) ->
+    gen_server:call(Pid, {bootstrap_w_scheduler, TestEngine}).
 generate_instruction(AbstrInstruction) ->
     gen_server:call(?MODULE, {generate_instruction, AbstrInstruction}).
 generate_instruction(Pid, AbstrInstruction) ->
@@ -47,7 +55,7 @@ init([Config]) ->
             [agreement, causal_delivery, no_creation, no_duplications, validity])
     }}.
 
-handle_call(bootstrap, _From, State) ->
+handle_call(bootstrap_wo_scheduler, _From, State) ->
     NumProcesses = State#state.num_processes,
     DeliverTo = State#state.dlv_to,
     BCType = State#state.bc_type,
@@ -61,6 +69,9 @@ handle_call(bootstrap, _From, State) ->
     BC_Pids = lists:map(StartBCProcess, lists:seq(0, NumProcesses - 1)),
     application:set_env(sched_msg_interception_erlang, bc_pids, BC_Pids),
     {reply, ok, State#state{bc_pids = BC_Pids}};
+handle_call({bootstrap_w_scheduler, _TestEngine}, _From, _State) ->
+    io:format("bootstrap_w_scheduler should not be called for ~p", [?MODULE]),
+    {reply, ok, _State};
 handle_call({generate_instruction, #abstract_instruction{function = broadcast}}, _From, State) ->
     % select random process to broadcast the message
     BC_Pids = State#state.bc_pids,

@@ -30,7 +30,8 @@ to be run on top level of the respective repo
 
 `ra_kv_store`:
 
-    rebar3 ct --suite=test/store_SUITE.erl
+    rebar3 ct --suite=test/store_SUITE.erl 
+    rebar3 ct --suite=test/ra-kv-store_module_SUITE.erl // currently with verbose output
 
 Testcases That do NOT Work (yet again)
 -----

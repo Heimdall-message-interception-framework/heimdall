@@ -729,7 +729,7 @@ call_clean(ServerRef, Request, Timeout, T) ->
             fun () ->
 %%              MIL
               message_interception_layer:register_with_name(MIL,
-                       list_to_atom(pid_to_list(self())), self(), middle_proc),
+                       string:concat("gen_mi_statem_", pid_to_list(self())), self(), gen_mi_statem),
 %%              erlang:display(["SPAWN of CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
               Response = try gen_mi:call(
                           ServerRef, '$gen_call', Request, T) of

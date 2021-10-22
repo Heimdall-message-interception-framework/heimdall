@@ -81,6 +81,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
     % start MIL 
     {ok, MIL} = message_interception_layer:start(),
+    erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 
     % create observer manager
@@ -128,12 +129,22 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
 
             [{NextInstr, ProgState} | History] end,
         History, Steps),
-    
+
+%%TODO: remove again
+    % check if our monitors report anything
+    receive Msg ->
+        io:format("Received from Monitors: ~p~n", [Msg])
+    after 0 ->
+        ok
+    end,
+
+    ok = SUTModule:stop_sut(),
+    gen_server:stop(SUTModRef),
+
     % clean MIL, Observer Manager, SUT Module and Scheduler
     gen_server:stop(MIL),
-    gen_event:stop(ObsManager),
-    gen_server:stop(SUTModRef),
     gen_server:stop(Scheduler),
+    gen_event:stop(ObsManager),
     % return run
     Run.
 
@@ -144,7 +155,10 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
         true -> apply(Module, Function, Args);
         false ->
             _Pid = spawn(fun() ->
-                message_interception_layer:register_with_name(MIL, "run_instr_proc" ++ erlang:now(), self(), run_instr_proc),
+                message_interception_layer:register_with_name(MIL,
+                    string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
+                    self(),
+                    run_instr_proc),
                 apply(Module, Function, Args)
 %%        TODO send result back
                          end)

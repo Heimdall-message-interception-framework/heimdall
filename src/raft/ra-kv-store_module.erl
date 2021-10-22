@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
 
--export([bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, get_instructions/0, get_observers/0, generate_instruction/1, generate_instruction/2, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, needs_bootstrap_w_scheduler/0]).
+-export([bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, get_instructions/0, get_observers/0, generate_instruction/1, generate_instruction/2, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, needs_bootstrap_w_scheduler/0, stop_sut/0, stop_sut/1]).
 -export([start/1, start_link/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
@@ -53,6 +53,11 @@ generate_instruction(AbstrInstruction) ->
 generate_instruction(Pid, AbstrInstruction) ->
     gen_server:call(Pid, {generate_instruction, AbstrInstruction}).
 
+stop_sut() ->
+    gen_server:call('ra-kv-store_module', stop_sut).
+stop_sut(Pid) ->
+    gen_server:call(Pid, stop_sut).
+
 %%% gen server callbacks
 -spec init([Args :: term()]) ->
     {ok, State :: term()} | {ok, State :: term(), timeout() | hibernate | {continue, term()}} |
@@ -81,6 +86,7 @@ handle_call(bootstrap_wo_scheduler, _From, State) ->
     Machine = {module, ra_kv_store, #{}}, % last parameter #{} is Config
     application:ensure_all_started(ra),
     ok = ra:start(),
+%%    TODO: linked?
     {reply, ok, State#state{names = Names, nodes = Nodes, clusterid = ClusterId, machine = Machine}};
 %%
 handle_call({bootstrap_w_scheduler, TestEngine}, _From, #state{clusterid = ClusterId, machine = Machine, nodes = Nodes} = State) ->
@@ -111,7 +117,7 @@ handle_call({generate_instruction, AbsInstr}, _From, State) ->
         read -> % ServerRef :: name(), Key :: integer())
             [ServerRef, get_integer()];
         cas -> % ServerRef :: name(), Key :: integer(), Value :: integer()
-            [ServerRef, get_integer(), get_integer()];
+            [ServerRef, get_integer(), get_integer(), get_integer()];
         _ -> % undefined
            erlang:throw("unknown abstract instruction for ra_kv_store")
     end,
@@ -120,7 +126,11 @@ handle_call({generate_instruction, AbsInstr}, _From, State) ->
         args = Args},
     {reply,
         Instruction,
-        State}.
+        State};
+%%
+handle_call(stop_sut, _From, State) ->
+    Result = application:stop(ra),
+    {reply, Result, State}.
 %%
 -spec handle_cast(Request :: term(), State :: term()) ->
     {noreply, NewState :: term()} |

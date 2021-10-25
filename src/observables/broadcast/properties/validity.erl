@@ -18,7 +18,7 @@ check_validity(State) ->
     CheckPerProcess = fun(Proc,Broadcast) ->
         % substract delivered messages from broadcast messages to check if there are messages that
         % still need to be delivered
-        sets:is_empty(sets:subtract(Broadcast, maps:get(Proc, State#state.delivered_p))) end,
+        sets:is_empty(sets:subtract(Broadcast, maps:get(Proc, State#state.delivered_p, sets:new()))) end,
     Validity = maps:map(CheckPerProcess, State#state.broadcast_p),
     % io:format("[validity_prop]: validity is ~p~n", [Validity]),
     State#state{validity_p = Validity}.
@@ -49,10 +49,12 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
     PropertiesChecked = check_properties(NewState),
     % io:format("[validity_prop] process ~s delivered message: ~p. Validity: ~p~n", [Proc, Msg, maps:get(Proc, PropertiesChecked#state.validity_p, true)]),
     {ok, PropertiesChecked};
-handle_event(Event, State) ->
-    % io:format("[validity_prop] received unhandled event: ~p~n", [Event]),
+handle_event(_Event, State) ->
+    % io:format("[validity_prop] received unhandled event: ~p~n", [_Event]),
     {ok, State}.
 
+handle_call(get_result, State) -> 
+    {ok, State#state.validity_p, State};
 handle_call(Msg, State) ->
     io:format("[validity_prop] received unhandled call: ~p~n", [Msg]),
     {ok, ok, State}.

@@ -3,11 +3,12 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--export([all/0, test_engine/1, test_module/1, init_per_testcase/2]).
+-export([all/0, test_engine/1, test_module/1, init_per_testcase/2, test_scheduler_bfs/1]).
 
 all() -> [
    test_module,
-   test_engine
+   test_engine,
+   test_scheduler_bfs
 ].
 
 init_per_suite(Config) ->
@@ -61,6 +62,26 @@ test_engine(InitialConfig) ->
   Timeout = 20000,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
                              MILInstructions, 100, 5, Timeout),
+  lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
+
+
+
+test_scheduler_bfs(InitialConfig) ->
+  {ok, Engine} = gen_server:start_link(test_engine, [bc_module, scheduler_bfs], []),
+  MILInstructions = [],
+  Conf = maps:from_list([
+    {observers, [causal_delivery]},
+    {num_processes, 2},
+    {bc_type, causal_broadcast},
+    {num_possible_dev_points, 50},
+    {size_d_tuple, 5}
+  ]
+  ++ InitialConfig),
+  ListenTo = lists:map(fun(Id) -> "bc" ++ integer_to_list(Id) ++ "_be" end, lists:seq(0, maps:get(num_processes, Conf)-1)),
+  Conf2 = maps:put(listen_to, ListenTo, Conf),
+  Timeout = 20000,
+  Runs = test_engine:explore(Engine, bc_module, Conf2,
+    MILInstructions, 2, 30, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 
 

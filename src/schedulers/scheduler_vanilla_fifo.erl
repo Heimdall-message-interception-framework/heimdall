@@ -9,6 +9,8 @@
 -module(scheduler_vanilla_fifo).
 -author("fms").
 
+-behaviour(gen_server).
+
 -include("test_engine_types.hrl").
 
 -record(state, {}).

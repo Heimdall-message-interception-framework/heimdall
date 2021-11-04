@@ -9,6 +9,8 @@
 -module(scheduler_random).
 -author("fms").
 
+-behaviour(gen_server).
+
 -include("test_engine_types.hrl").
 
 -define(ShareSUT_Instructions, 3).

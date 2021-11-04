@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, start/1, add_events/2, get_first_enabled/2]).
+-export([start_link/0, start/1, add_events/2, get_first/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -20,24 +20,12 @@
 
 -define(SERVER, ?MODULE).
 
--record(chain, {
-  chain_key :: integer(),
-  chain_content = queue:new() :: queue:queue({ID :: integer(), From :: any(), To :: any()}),
-  dependencies = sets:new() :: sets:set(any()) % set of processes
-}).
-
--record(chain_container, {
-%%  index :: integer(),
-  chains = [] :: lists:list(#chain{})
-}).
-
 -record(state, {
-  last_chain_key = 1 :: integer(),
-  chain_data = maps:from_list({1, #chain_container{}}) :: maps:map(integer(), #chain_container{}),
+  next_chain_key = 1 :: integer(),
+  last_chain_key = undefined :: integer() | undefined,
+  chain_map = maps:new() :: maps:map(integer(), queue:queue()),
   command_ids_in_chains = sets:new() :: sets:set(any())
 }).
-
-%% TODO: add functions for init and handling calls
 
 %%%===================================================================
 %%% API
@@ -53,12 +41,10 @@ start(Config) ->
   gen_server:start({local, ?MODULE}, ?MODULE, [Config], []).
 
 add_events(OCC, CommInTransit) ->
-%%  returns {ok, ListIDsAdded, ChainKeysAdded}
   gen_server:call(OCC, {add_events, CommInTransit}).
 
-get_first_enabled(OCC, ChainKey) ->
-%%  returns Maybe(Id, F, T) and which once become enabled if not none
-  gen_server:call(OCC, {get_first_enabled, ChainKey}).
+get_first(OCC, ChainKey) ->
+  gen_server:call(OCC, {get_first, ChainKey}).
 
 %%%===================================================================
 %%% gen_server callbacks
@@ -84,40 +70,51 @@ init([]) ->
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({add_events, CommInTrans}, _From,
     State = #state{command_ids_in_chains = IDsInChains,
+                   next_chain_key = NextChainKey,
                    last_chain_key = LastChainKey,
-                   chain_data = ChainContainerMap}) ->
+                   chain_map = ChainMap}) ->
 %%  1) single out commands which are not in chain covering yet (maybe store ids in a set but keep consistent)
   AddedCommands = detect_added_commands_in_transit(IDsInChains, CommInTrans),
-%%  2) for each command, update the dependencies of all chains
-  MapFunForMapChainContainer = fun(NewCmd, MapChainContainerTemp) ->
-    maps:map(
-      fun(_Index, ChainContainer) -> update_dependencies_chain_container(ChainContainer, NewCmd) end,
-      MapChainContainerTemp
-    )
+%%  2) for each command, insert it to chains
+%%  2a) for the first in list, use the chain from which we took the last event (cannot have other events as just happened)
+  {ChainMap2, RemainingCommands, ChainKeysAffected} = case LastChainKey of
+                                     undefined -> {ChainMap, AddedCommands, []};
+                                     _ActualChainKey ->
+                                       [FirstCommand | RemCommands] = AddedCommands,
+                                       ChainMap1 = maps:update(LastChainKey, [FirstCommand], ChainMap),
+                                       {ChainMap1, RemCommands, [LastChainKey]}
   end,
-  ChainContainerMap1 = lists:foldl(MapFunForMapChainContainer, ChainContainerMap, AddedCommands),
-%%  3) for each command, insert it to chain covering and swap the bags
-  % find index to insert, i.e., a chaincontainer with a chain s.t. last element is related to next command
-  {ChainContainerMap3, LastChainKey3} =
-    lists:foldl(
-      fun(NewCmd, {ChainContainerMap2, LastChainKey2}) ->
-        insert_single_command(NewCmd, LastChainKey2, ChainContainerMap2) end,
-      {ChainContainerMap1, LastChainKey},
-      AddedCommands
-    ),
-%%  4) Update State
+%%  2b) for the remaining, create new ones (do not re-use) % TODO: need some way to tell scheduler when empty
+  ListIndicesForRemainingCmds = lists:seq(NextChainKey, NextChainKey + length(RemainingCommands)),
+  ListIndicesAndCmds = lists:zip(ListIndicesForRemainingCmds, RemainingCommands),
+  NextChainKey1 = NextChainKey + length(RemainingCommands) + 1,
+  ChainMap3 = lists:foldl(
+    fun({Index, Cmd}, ChainMapTemp) -> maps:update(Index, [Cmd], ChainMapTemp) end,
+    ChainMap2,
+    ListIndicesAndCmds
+  ),
+%%  3) update state
   AddedIDs = lists:map(fun({ID, _, _, _, _, _}) -> ID end, AddedCommands),
   State1 = State#state{
-    command_ids_in_chains = sets:union(IDsInChains, AddedIDs),
-    last_chain_key = LastChainKey3,
-    chain_data = ChainContainerMap3
+    command_ids_in_chains = sets:union(IDsInChains, sets:from_list(AddedIDs)),
+    next_chain_key = NextChainKey1,
+    chain_map = ChainMap3
   },
 %%  5) compute return
-  ChainKeysAdded = lists:seq(LastChainKey, LastChainKey3 - 1), % update if name changes
-  {ok, {AddedIDs, ChainKeysAdded}, State1};
-handle_call({get_first_enabled, ChainKey}, _From,
-    State = #state{chain_data = Chains}) ->
-  ok; % TODO: proper return value
+  ChainKeysAdded1 = lists:zip(ChainKeysAffected, lists:seq(NextChainKey, NextChainKey1 - 1)),
+  {reply, {AddedIDs, ChainKeysAdded1}, State1};
+handle_call({get_first, ChainKey}, _From,
+    State = #state{chain_map = ChainMap}) ->
+  Chain = maps:get(ChainKey, ChainMap),
+  case queue:out(Chain) of
+    {{value, {ID, From, To}}, Chain1} ->
+      Reply = {found, {ID, From, To}},
+      ChainMap1 = maps:update(ChainKey, Chain1, ChainMap),
+      State1 = State#state{chain_map = ChainMap1},
+      {reply, Reply, State1};
+    {empty, _} -> % once empty (after one round nothing added), it shall not be refilled
+      {reply, empty, State}
+  end;
 handle_call(_Request, _From, State = #state{}) ->
   erlang:throw("unhandled call"),
   {reply, ok, State}.
@@ -162,92 +159,6 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-
 detect_added_commands_in_transit(CommInChains, CommInTrans) ->
   HelperPredicate = fun({ID, _, _, _, _, _}) -> (not sets:is_element(ID, CommInChains)) end,
   lists:filter(HelperPredicate, CommInTrans).
-
-update_dependencies_chain_container(ChainContainer, NewCmd) ->
-%%  total process order check does not need data, only (send, rcv) need
-  {_, From, To, _, _, _} = NewCmd,
-  FunctionToUpdateChainDependencies =
-    fun(Chain = #chain{dependencies = Dependencies}) ->
-%%      Invariant: From and To of last are always in Dependencies, then no need to check last element
-        Dependencies1 = case sets:is_element(From, Dependencies) of
-                          false -> Dependencies;
-                          true -> sets:add_element(Dependencies, To)
-                        end,
-        Chain#chain{dependencies = Dependencies1}
-    end,
-  NewChains = lists:map(FunctionToUpdateChainDependencies, ChainContainer#chain_container.chains),
-  ChainContainer#chain_container{chains = NewChains}.
-
-
-command_can_be_added_chain_container(ChainContainer, {_From, To}) ->
-  CommandCanBeAddedToChainFunc = fun(Chain = #chain{dependencies = Dependencies}, AccBoolean) ->
-%%    a command can be added if From or To is in dependencies (we schedule receptions)
-%%    if From was in there, we know that To is now in there as we updated
-                                  AccBoolean or (sets:is_element(To, Dependencies))
-                                  end,
-  lists:foldl(CommandCanBeAddedToChainFunc, false, ChainContainer#chain_container.chains).
-
-insert_single_command(NewCmd, LastChainKey, ChainContainerMap1) ->
-  {_, From, To, _, _, _} = NewCmd,
-  SequenceOfIndices = lists:seq(1, LastChainKey-1),
-  FilterFunctionForIndices = fun(Index) ->
-    ChainContainer = maps:get(Index, ChainContainerMap1),
-    command_can_be_added_chain_container(ChainContainer, {From, To})
-                             end,
-  [IndexToAdd  | _ ] = lists:filter(FilterFunctionForIndices, SequenceOfIndices),
-  % remove the first chain where it is possible from this chain container
-  % or add a new chain and store the chainkey for this one -> CA (but small scope)
-  ChainContainerAtIndex = maps:get(IndexToAdd, ChainContainerMap1),
-  {ChainToAddTo, ChainContainerAtIndex1} =
-    case get_first_chain_to_add_command(ChainContainerAtIndex, {From, To}) of
-      {found, Chain, ChainContainerAtIndexTemp} -> {Chain, ChainContainerAtIndexTemp};
-      {notfound} -> {#chain{chain_key = LastChainKey}, ChainContainerAtIndex}
-    end,
-  LastChainKey1 = LastChainKey + 1,
-  % add the NewCmd to this chain
-  ChainToAddTo1 = add_command_to_chain(ChainToAddTo, NewCmd),
-  % if IndexToAdd > 1, swap the chain containers
-  ChainContainerMap4 = case IndexToAdd > 1 of
-                         false -> ChainContainerBelowIndex = maps:get(IndexToAdd-1, ChainContainerMap1),
-                           BelowChains = ChainContainerBelowIndex#chain_container.chains,
-                           BelowChains1 = lists:reverse([ChainToAddTo1 | lists:reverse(BelowChains)]),
-                           ChainContainerBelowIndex1 = ChainContainerBelowIndex#chain_container{chains = BelowChains1},
-                           ChainContainerMap2 = maps:update(IndexToAdd, ChainContainerBelowIndex1, ChainContainerMap1),
-                           ChainContainerMap3 = maps:update(IndexToAdd, ChainContainerAtIndex1, ChainContainerMap2),
-                           ChainContainerMap3;
-                         true -> % we know that IndexToAdd is 1 then so single chain to which we added
-                           AtIndexChains1 = [ChainToAddTo1],
-                           ChainContainerAtIndex2 = ChainContainerAtIndex1#chain_container{chains = AtIndexChains1},
-                           maps:update(IndexToAdd, ChainContainerAtIndex2, ChainContainerMap1)
-                       end,
-  {ChainContainerMap4, LastChainKey1}.
-
-get_first_chain_to_add_command(#chain_container{chains = Chains}, {From, To}) ->
-%%  we know that it exists (or the container is not full yet)
-  get_first_chain_to_add_command([], Chains, {From, To}).
-
-get_first_chain_to_add_command(PrefixChains, SuffixChains, {From, To}) ->
-%%  note that PrefixChains is reversed and we reverse it when returning
-  case SuffixChains of
-    [Chain | SuffixChains1] ->
-      case command_can_be_added_chain(Chain, {From, To}) of
-        true -> {found, Chain, lists:append(lists:reverse(PrefixChains), SuffixChains1)};
-        false -> PrefixChains1 = [Chain | PrefixChains],
-                 get_first_chain_to_add_command(PrefixChains1, SuffixChains1, {From, To})
-      end;
-    [] -> {notfound}
-  end.
-
-add_command_to_chain(Chain = #chain{chain_content = ChainContent, dependencies = Dependencies}, NewCmd) ->
-  {ID, From, To, _, _, _} = NewCmd,
-  ChainContent1 = queue:in({ID, From, To}, ChainContent),
-  Dependencies1 = sets:from_list([To]),
-  Chain#chain{chain_content = ChainContent1, dependencies = Dependencies1}.
-
-
-command_can_be_added_chain(#chain{dependencies = Dependencies}, {From, To}) ->
-  (sets:is_element(From, Dependencies)) or (sets:is_element(To, Dependencies)).

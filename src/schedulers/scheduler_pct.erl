@@ -20,8 +20,8 @@
     online_chain_covering :: pid(),
     events_added = 0 :: integer(),
     d_tuple :: lists:list(non_neg_integer()),
-    ids_with_d_tuple_index = [] :: lists:list(any()),
-    chain_keys = [] :: lists:list(any()) % list of chain keys in priority order
+    chain_key_prios = maps:new() :: maps:maps(any()),
+    next_prio :: integer()
 }).
 
 -type kind_of_instruction() :: sut_instruction | sched_instruction. % | timeout_instruction | node_connection_instruction.
@@ -49,9 +49,9 @@ init([Config]) ->
   SizeDTuple = maps:get(size_d_tuple, Config, undefined),
   case (NumPossibleDevPoints == undefined) or (SizeDTuple == undefined) of
     true -> erlang:throw("scheduler pct not properly configured");
-    false -> DTuple = produce_d_tuple(SizeDTuple, NumPossibleDevPoints),
-             OnlineChainCovering = online_chain_covering:start(Config),
-            {ok, #state{d_tuple = DTuple, online_chain_covering = OnlineChainCovering}}
+  false -> DTuple = produce_d_tuple(SizeDTuple, NumPossibleDevPoints),
+            {ok, OnlineChainCovering} = online_chain_covering:start(Config),
+            {ok, #state{d_tuple = DTuple, online_chain_covering = OnlineChainCovering, next_prio = SizeDTuple}}
   end.
 
 handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _From, State = #state{}) ->
@@ -85,15 +85,15 @@ getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
 -spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _, #state{}) -> {#instruction{}, #state{}}.
 get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State) ->
   KindInstruction = get_kind_of_instruction(),
-    {NextInstruction, State2} =
+%%    {NextInstruction, State2} =
       case (CommInTransit == []) or (KindInstruction == sut_instruction) of
         true -> {produce_sut_instruction(SUTModule), State};
         false -> produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State)
-      end,
-    case NextInstruction of
-      undefined -> get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State2);
-      _ -> {NextInstruction, State2}
-    end.
+      end.
+%%    case NextInstruction of
+%%      undefined -> get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State2);
+%%      _ -> {NextInstruction, State2}
+%%    end.
 
 -spec produce_sut_instruction(atom()) -> #instruction{}.
 produce_sut_instruction(SUTInstructionModule) ->
@@ -107,16 +107,26 @@ produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, _S
   undefined;
 produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, Timeouts,
     #state{
-      online_chain_covering = OCC
+      online_chain_covering = OCC,
+      chain_key_prios = ChainKeyPrios
     } = State) ->
-%%  TODO: need to use order of chain keys here
-  case online_chain_covering:get_first_enabled(OCC, ChainKey) of
-    {{ID, From, To}, EnabledIDs} -> ok;
-    undefined -> ok; % TODO
-  end,
-%%  returns Maybe(Id, F, T) and which once become enabled if not none
-  ok.
+  {ChainKeyPrios1, Instruction} = get_next_from_chains(ChainKeyPrios, OCC, MIL),
+  State1 = State#state{chain_key_prios = ChainKeyPrios1},
+  {Instruction, State1}.
 
+get_next_from_chains(ChainKeyPrios, OCC, MIL) ->
+  Prios = maps:keys(ChainKeyPrios),
+  MaxPrio = lists:max(Prios),
+  ChainKeyMaxPrio = maps:get(MaxPrio, ChainKeyPrios),
+  case online_chain_covering:get_first(OCC, ChainKeyMaxPrio) of
+    {ID, From, To} ->
+      ArgsWithMIL = [MIL | [ID | [From | To]]],
+      Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
+      {ChainKeyPrios, Instruction};
+    empty -> % remove from chain_key_prios list and find again
+      ChainKeyPrios1 = maps:remove(ChainKeyMaxPrio, ChainKeyPrios),
+      get_next_from_chains(ChainKeyPrios1, OCC, MIL)
+  end.
 
 -spec get_kind_of_instruction() -> kind_of_instruction().
 get_kind_of_instruction() ->
@@ -127,23 +137,74 @@ get_kind_of_instruction() ->
     false -> sched_instruction
   end.
 
-get_args_from_command_for_mil(Command) ->
-  {Id, From, To, _Module, _Function, _Args} = Command,
-  [Id, From, To].
-
 -spec update_state(#state{}, [any()]) -> #state{}.
 update_state(#state{
-  ids_with_d_tuple_index = IDsWithDTuple,
   events_added = EventsAdded,
-  online_chain_covering = OCC
+  online_chain_covering = OCC,
+  d_tuple = DTuple,
+  chain_key_prios = ChainKeysPrios
   } = State,
     CommInTransit) ->
 %%  add events and get list of added ids in order back
-  {ListIDsAdded, ChainKeysAdded} = online_chain_covering:add_events(OCC, CommInTransit),
-%%  TODO: per id, check whether (index + EventsAdded) in d_tuple and store if so
-%%  TODO: add ChainKeys to PriorityList
-%%  TODO (return state)
-  ok.
+%%  TODO: do we need the 1st list?
+  {ListIDsAdded, ChainKeysAffected} = online_chain_covering:add_events(OCC, CommInTransit),
+  IndexList = lists:seq(1, length(ListIDsAdded)),
+  IndexAndIDsAndChainKeys = lists:zip3(IndexList, ListIDsAdded, ChainKeysAffected),
+  [{Index, _ID, ChainKey} | RemainingTriples] = IndexAndIDsAndChainKeys,
+  {ChainKeysPrios1, TriplesToHandle} = case lists:member(ChainKey, ChainKeysPrios) of
+      false -> {ChainKeysPrios, IndexAndIDsAndChainKeys};
+      true -> % take care of this individually and check whether to decrease priority
+             case in_d_tuple(Index, DTuple) of
+               notfound -> {ChainKeysPrios, RemainingTriples};
+               {found, IndexInDTuple} ->
+                 ChainKeysPriosTemp1 = maps:remove(EventsAdded + Index, ChainKeysPrios), % remove ChainKey
+                 ChainKeysPriosTemp2 = maps:update(IndexInDTuple, ChainKey, ChainKeysPriosTemp1),
+                 {ChainKeysPriosTemp2, RemainingTriples}
+             end
+  end,
+  ChainKeysPrios2 = lists:foldl(
+    fun({Index, _ID, ChainKey}, ChainKeysPriosAcc) ->
+      case in_d_tuple(Index, DTuple) of
+        notfound ->
+          Prios = maps:keys(ChainKeysPriosAcc),
+          SortedPrios = lists:sort(Prios),
+          {SortedPriosAboveD, _} = lists:partition(fun(Prio) -> Prio > length(DTuple) end, SortedPrios),
+          % randomly choose after which to insert
+          Position = rand:uniform(length(SortedPriosAboveD)),
+          PrioBefore = lists:nth(Position, SortedPriosAboveD),
+%%          TODO: nth does not support default values...
+          PrioAfter = lists:nth(Position+1, SortedPriosAboveD, undefined),
+          ChainKeysPriosAcc1 = case PrioAfter of
+            undefined -> % chose last position so just add 20 indices later
+              maps:update(PrioBefore+20, ChainKeysPriosAcc);
+            _ActualPrio -> % CA on whether there is space between both prios
+                               case PrioAfter - PrioBefore > 1 of
+                                 false -> % no space so we double all prios above d to make space
+                                   ChainKeysPriosTemp = lists:foldl(
+                                     fun(OrigPrio, ChainKeysPriosAccTemp) ->
+                                       ChainKey = maps:get(OrigPrio, ChainKeysPriosAccTemp),
+                                       ChainKeysPriosTempp1 = maps:remove(OrigPrio, ChainKeysPriosAccTemp),
+                                       maps:update(4*OrigPrio, ChainKey, ChainKeysPriosTempp1)
+                                     end,
+                                     ChainKeysPriosAcc,
+                                     SortedPriosAboveD
+                                   ),
+                                   maps:update(4*PrioBefore + trunc((4*PrioAfter - 4*PrioBefore)/2), ChainKey, ChainKeysPriosTemp);
+                                 true -> % can use some spot there, choose middle
+                                   maps:update(PrioBefore + trunc((PrioAfter - PrioBefore)/2), ChainKey, ChainKeysPriosAcc)
+                               end
+          end,
+          ChainKeysPriosAcc1;
+        {found, IndexInDTuple1} ->
+          ChainKeysPriosAccTemp1 = maps:remove(EventsAdded + Index, ChainKeysPrios), % remove ChainKey
+          ChainKeysPriosAccTemp2 = maps:update(IndexInDTuple1, ChainKey, ChainKeysPriosAccTemp1),
+          ChainKeysPriosAccTemp2
+      end
+    end,
+    ChainKeysPrios1,
+    TriplesToHandle
+  ),
+  State#state{events_added = EventsAdded + length(ListIDsAdded), chain_key_prios = ChainKeysPrios2}.
 
 
 -spec in_d_tuple(non_neg_integer(), list(non_neg_integer())) -> {found, non_neg_integer()} | notfound.
@@ -154,40 +215,6 @@ in_d_tuple(NumDevPoints, DTuple) ->
   case LenSuffix == 0 of % predicate never got true so not in list
     true -> notfound;
     false -> {found, length(DTuple) - LenSuffix} % index from 0
-  end.
-
-get_instruction_from_command(Command, MIL) ->
-  Args = get_args_from_command_for_mil(Command),
-  ArgsWithMIL = [MIL | Args],
-  #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL}.
-
-get_timeout_instruction(Timeouts, MIL) when Timeouts /= [] ->
-  TimeoutToFire = choose_from_list(Timeouts), % we also prioritise the ones in front
-  {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
-  #instruction{module = message_interception_layer, function = fire_timeout, args = Args}.
-
-choose_from_list(List) ->
-  choose_from_list(List, 5).
-choose_from_list(List, Trials) when Trials == 0 ->
-%%  pick first; possible since the list cannot be empty
-  [Element | _] = List,
-  Element;
-choose_from_list(List, Trials) when Trials > 0 ->
-  HelperFunction = fun(X, Acc) ->
-    case Acc of
-      undefined -> RandomNumber = rand:uniform() * 4, % 75% chance to pick first command
-        case RandomNumber < 3 of
-          true -> X;
-          false -> undefined
-        end;
-      Cmd       -> Cmd
-    end
-                   end,
-  MaybeElement = lists:foldl(HelperFunction, undefined, List),
-  case MaybeElement of
-    undefined -> choose_from_list(List, Trials-1);
-    Element -> Element
   end.
 
 

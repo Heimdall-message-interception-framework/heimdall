@@ -73,25 +73,50 @@ handle_call({add_events, CommInTrans}, _From,
                    next_chain_key = NextChainKey,
                    last_chain_key = LastChainKey,
                    chain_map = ChainMap}) ->
-%%  1) single out commands which are not in chain covering yet (maybe store ids in a set but keep consistent)
+%%  1a) single out commands which are not in chain covering yet (maybe store ids in a set but keep consistent)
   AddedCommands = detect_added_commands_in_transit(IDsInChains, CommInTrans),
+%%  1b) partition them by receiver since they go in the same chain
+  % get all recipients
+  RecipientsListNonUnique = lists:reverse(
+    lists:foldl(fun({_, _, To, _, _, _}, AccListRev) -> [To | AccListRev] end, [], AddedCommands)
+  ),
+  RecipientsListUnique = lists:reverse(lists:foldl(
+    fun({_, _, To, _, _, _}, AccList) ->
+      case lists:member(To, AccList) of
+         true -> AccList;
+         false -> [To, AccList]
+      end
+    end,
+    [],
+    RecipientsListNonUnique)),
+  % per recipient, construct a list of commands
+  AddedCommandsByReceiver = lists:map(
+    fun(Recipient) -> lists:filter(fun({_, _, To, _, _, _}) -> To == Recipient end, AddedCommands) end,
+    RecipientsListUnique
+  ),
 %%  2) for each command, insert it to chains
 %%  2a) for the first in list, use the chain from which we took the last event (cannot have other events as just happened)
-  {ChainMap2, RemainingCommands, ChainKeysAffected} = case LastChainKey of
+  {ChainMap2, RemainingCommandLists, ChainKeysAffected} = case LastChainKey of
                                      undefined -> {ChainMap, AddedCommands, []};
                                      _ActualChainKey ->
-                                       [FirstCommand | RemCommands] = AddedCommands,
-                                       ChainMap1 = maps:update(LastChainKey, [FirstCommand], ChainMap),
-                                       {ChainMap1, RemCommands, [LastChainKey]}
+                                       [FirstCommandList | RemCommandsList] = AddedCommandsByReceiver,
+                                       ChainMap1 = maps:update(LastChainKey, FirstCommandList, ChainMap),
+                                       {ChainMap1, RemCommandsList,
+                                         lists:duplicate(length(FirstCommandList), LastChainKey)}
   end,
-%%  2b) for the remaining, create new ones (do not re-use) % TODO: need some way to tell scheduler when empty
-  ListIndicesForRemainingCmds = lists:seq(NextChainKey, NextChainKey + length(RemainingCommands)),
-  ListIndicesAndCmds = lists:zip(ListIndicesForRemainingCmds, RemainingCommands),
-  NextChainKey1 = NextChainKey + length(RemainingCommands) + 1,
+%%  2b) for the remaining, create new ones (do not re-use as we'd re-use priorities as well)
+  ListIndicesForRemainingCmds = lists:seq(NextChainKey, NextChainKey + length(RemainingCommandLists)),
+  ListIndicesAndCmdLists = lists:zip(ListIndicesForRemainingCmds, RemainingCommandLists),
+  NextChainKey1 = NextChainKey + length(RemainingCommandLists) + 1,
   ChainMap3 = lists:foldl(
-    fun({Index, Cmd}, ChainMapTemp) -> maps:update(Index, [Cmd], ChainMapTemp) end,
-    ChainMap2,
-    ListIndicesAndCmds
+    fun({ChainKeyCurrent, CmdList}, {ChainMapTemp, ChainKeysAffectedTemp}) ->
+      ChainMapTemp1 = maps:update(ChainKeyCurrent, CmdList, ChainMapTemp),
+      ChainKeysAffectedTemp1 = lists:append(ChainKeysAffectedTemp,
+                                            lists:duplicate(length(CmdList), ChainKeyCurrent)),
+      {ChainMapTemp1, ChainKeysAffectedTemp1}
+    end,
+    {ChainMap2, ChainKeysAffected},
+    ListIndicesAndCmdLists
   ),
 %%  3) update state
   AddedIDs = lists:map(fun({ID, _, _, _, _, _}) -> ID end, AddedCommands),
@@ -100,9 +125,9 @@ handle_call({add_events, CommInTrans}, _From,
     next_chain_key = NextChainKey1,
     chain_map = ChainMap3
   },
-%%  5) compute return
-  ChainKeysAdded1 = lists:zip(ChainKeysAffected, lists:seq(NextChainKey, NextChainKey1 - 1)),
-  {reply, {AddedIDs, ChainKeysAdded1}, State1};
+%%  4) compute return
+  ChainKeysAffected1 = lists:zip(ChainKeysAffected, lists:seq(NextChainKey, NextChainKey1 - 1)),
+  {reply, ChainKeysAffected1, State1};
 handle_call({get_first, ChainKey}, _From,
     State = #state{chain_map = ChainMap}) ->
   Chain = maps:get(ChainKey, ChainMap),
@@ -110,7 +135,12 @@ handle_call({get_first, ChainKey}, _From,
     {{value, {ID, From, To}}, Chain1} ->
       Reply = {found, {ID, From, To}},
       ChainMap1 = maps:update(ChainKey, Chain1, ChainMap),
-      State1 = State#state{chain_map = ChainMap1},
+      LastChainKey1 = case queue:is_empty(Chain1) of
+        % only store last chain key if queue is empty, ow. next events do not depend on last event in chain
+        true -> ChainKey;
+        false -> undefined
+      end,
+      State1 = State#state{chain_map = ChainMap1, last_chain_key = LastChainKey1},
       {reply, Reply, State1};
     {empty, _} -> % once empty (after one round nothing added), it shall not be refilled
       {reply, empty, State}

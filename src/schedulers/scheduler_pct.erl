@@ -20,7 +20,7 @@
     online_chain_covering :: pid(),
     events_added = 0 :: integer(),
     d_tuple :: lists:list(non_neg_integer()),
-    chain_key_prios = maps:new() :: maps:maps(any()),
+    chain_key_prios = maps:new() :: maps:maps(any()), % map from priority to chainkey
     next_prio :: integer()
 }).
 
@@ -88,7 +88,7 @@ getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
   State.
 
 -spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _, #state{}) -> {#instruction{}, #state{}}.
-get_next_instruction(_MIL, SUTModule, _SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State)
+get_next_instruction(_MIL, SUTModule, _SchedInstructions, CommInTransit, _Timeouts, _Nodes, _Crashed, State)
   when CommInTransit == [] ->
   {produce_sut_instruction(SUTModule), State};
 get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State)
@@ -109,29 +109,21 @@ produce_sut_instruction(SUTInstructionModule) ->
 -spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
 produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
   {undefined, State};
-produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, _Timeouts,
+produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts,
     #state{
       online_chain_covering = OCC,
       chain_key_prios = ChainKeyPrios
     } = State) ->
-  {ChainKeyPrios1, Instruction} = get_next_from_chains(ChainKeyPrios, OCC, MIL),
-  State1 = State#state{chain_key_prios = ChainKeyPrios1},
-  {Instruction, State1}.
+  CmdID = get_next_from_chains(ChainKeyPrios, OCC, MIL),
+  [{_, From, To, _, _, _}] = lists:filter(fun({ID, _, _, _, _, _}) -> ID == CmdID end, CommInTransit),
+  ArgsWithMIL = [MIL | [CmdID | [From | To]]],
+  Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
+  {Instruction, State}.
 
 -spec get_next_from_chains(map(), any(), any()) -> {map(), #instruction{}}.
 get_next_from_chains(ChainKeyPrios, OCC, MIL) ->
-  Prios = maps:keys(ChainKeyPrios),
-  MaxPrio = lists:max(Prios),
-  ChainKeyMaxPrio = maps:get(MaxPrio, ChainKeyPrios),
-  case online_chain_covering:get_first(OCC, ChainKeyMaxPrio) of
-    {ID, From, To} ->
-      ArgsWithMIL = [MIL | [ID | [From | To]]],
-      Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
-      {ChainKeyPrios, Instruction};
-    empty -> % remove from chain_key_prios list and find again
-      ChainKeyPrios1 = maps:remove(ChainKeyMaxPrio, ChainKeyPrios),
-      get_next_from_chains(ChainKeyPrios1, OCC, MIL)
-  end.
+  Prios = lists:reverse(lists:sort(maps:keys(ChainKeyPrios))),
+  recursively_get_next_from_chains(Prios, ChainKeyPrios, OCC, MIL).
 
 -spec get_kind_of_instruction() -> kind_of_instruction().
 get_kind_of_instruction() ->
@@ -151,15 +143,24 @@ update_state(#state{
   } = State,
     CommInTransit) ->
 %%  1) get list of chain keys affected (with order and multiplicity) and annotate them with events-added-index
-  ChainKeysAffected = online_chain_covering:add_events(OCC, CommInTransit),
+  ChainKeysAffected = online_chain_covering:add_events(OCC, CommInTransit), % list with one entry per added cmd
+  ChainKeysAffectedUnique = sets:to_list(sets:from_list(ChainKeysAffected)),
+  OldChainKeys = maps:values(ChainKeysPrios),
+  NewChainKeys = lists:subtract(ChainKeysAffectedUnique, OldChainKeys),
+%%  1b) for each new chain_key, insert it
+  ChainKeysPrios1 = lists:foldl(
+    fun(ChainKey, ChainKeysPriosAcc) ->
+      insert_chain_key_at_random_position(ChainKeysPriosAcc, ChainKey, DTuple) end,
+      ChainKeysPrios,
+      NewChainKeys),
   IndexList = lists:seq(EventsAdded, EventsAdded + length(ChainKeysAffected) - 1),
   IndexAndChainKeyAffected = lists:zip(IndexList, ChainKeysAffected),
-%%  2) for each affected chain key, check whether event-added-index is in dtuple and insert accordingly
+%%  2) for each affected chain key, check whether event-added-index is in dtuple and (re-)insert accordingly
   ChainKeysPrios1 = lists:foldl(
     fun({Index, ChainKey}, ChainKeysPriosAcc) ->
       case in_d_tuple(Index, DTuple) of
         notfound ->
-          insert_chain_key_at_random_position(ChainKeysPriosAcc, ChainKey, DTuple);
+          ChainKeysPriosAcc;
         {found, IndexInDTuple1} -> % switch chainkey to the corresponding index
           ChainKeysPriosAccTemp1 = maps:remove(EventsAdded + Index, ChainKeysPrios),
           ChainKeysPriosAccTemp2 = maps:update(IndexInDTuple1, ChainKey, ChainKeysPriosAccTemp1),
@@ -196,30 +197,47 @@ produce_d_tuple(SizeDTuple, NumPossibleDevPoints) when SizeDTuple =< NumPossible
   DTuple.
 
 insert_chain_key_at_random_position(ChainKeysPriosAcc, ChainKey, DTuple) ->
-    Prios = maps:keys(ChainKeysPriosAcc),
-    SortedPrios = lists:sort(Prios),
+    SortedPrios = lists:sort(maps:keys(ChainKeysPriosAcc)),
     {SortedPriosAboveD, _} = lists:partition(fun(Prio) -> Prio > length(DTuple) end, SortedPrios),
-    % randomly choose after which to insert
-    Position = rand:uniform(length(SortedPriosAboveD)),
-    PrioBefore = lists:nth(Position, SortedPriosAboveD),
-    case Position < length(SortedPriosAboveD) of
-      true ->
-        PrioAfter = lists:nth(Position+1, SortedPriosAboveD),
-        case PrioAfter - PrioBefore > 1 of
-          false -> % no space so we double all prios above d to make space
-            ChainKeysPriosTemp = lists:foldl(
-              fun(OrigPrio, ChainKeysPriosAccTemp) ->
-                ChainKey = maps:get(OrigPrio, ChainKeysPriosAccTemp),
-                ChainKeysPriosTempp1 = maps:remove(OrigPrio, ChainKeysPriosAccTemp),
-                maps:update(4*OrigPrio, ChainKey, ChainKeysPriosTempp1)
-              end,
-              ChainKeysPriosAcc,
-              SortedPriosAboveD
-            ),
-            maps:update(4*PrioBefore + trunc((4*PrioAfter - 4*PrioBefore)/2), ChainKey, ChainKeysPriosTemp);
-          true -> % can use some spot there, choose middle
-            maps:update(PrioBefore + trunc((PrioAfter - PrioBefore)/2), ChainKey, ChainKeysPriosAcc)
-        end;
-      false -> % chose last position so just add 20 indices later
-        maps:update(PrioBefore+20, ChainKey, ChainKeysPriosAcc)
-    end.
+    % randomly choose at which to insert
+    case SortedPriosAboveD of
+      [] -> % no priorities above d
+        ok; % TODO
+      _ ->
+        Position = rand:uniform(length(SortedPriosAboveD)),
+        PrioBefore = lists:nth(Position, SortedPriosAboveD),
+        case Position < length(SortedPriosAboveD) of
+          true ->
+            PrioAfter = lists:nth(Position+1, SortedPriosAboveD),
+            case PrioAfter - PrioBefore > 1 of
+              false -> % no space so we double all prios above d to make space
+                ChainKeysPriosTemp = lists:foldl(
+                  fun(OrigPrio, ChainKeysPriosAccTemp) ->
+                    ChainKey = maps:get(OrigPrio, ChainKeysPriosAccTemp),
+                    ChainKeysPriosTempp1 = maps:remove(OrigPrio, ChainKeysPriosAccTemp),
+                    maps:update(4*OrigPrio, ChainKey, ChainKeysPriosTempp1)
+                  end,
+                  ChainKeysPriosAcc,
+                  SortedPriosAboveD
+                ),
+                maps:update(4*PrioBefore + trunc((4*PrioAfter - 4*PrioBefore)/2), ChainKey, ChainKeysPriosTemp);
+              true -> % can use some spot there, choose middle
+                maps:update(PrioBefore + trunc((PrioAfter - PrioBefore)/2), ChainKey, ChainKeysPriosAcc)
+            end;
+          false -> % chose last position so just add 20 indices later
+            maps:update(PrioBefore+20, ChainKey, ChainKeysPriosAcc)
+        end.
+    end,
+
+recursively_get_next_from_chains(Prios, ChainKeyPrios, OCC, MIL) ->
+  case Prios of
+    [] -> erlang:throw("ran out of IDs in OCC even though there are commands in transit");
+    [MaxPrio | RemPrios] ->
+      ChainKeyMaxPrio = maps:get(MaxPrio, ChainKeyPrios),
+      case online_chain_covering:get_first(OCC, ChainKeyMaxPrio) of
+        empty -> % this chain was empty (for now)
+          recursively_get_next_from_chains(RemPrios, ChainKeyPrios, OCC, MIL);
+        ID -> ID % return ID and scheduler retrieves From and To
+      end
+  end.
+

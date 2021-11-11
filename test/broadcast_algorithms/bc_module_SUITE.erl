@@ -100,6 +100,6 @@ test_scheduler_pct(InitialConfig) ->
   Conf2 = maps:put(listen_to, ListenTo, Conf),
   Timeout = 20000,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
-    MILInstructions, 2, 30, Timeout),
+    MILInstructions, 1, 30, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 

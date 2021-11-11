@@ -20,7 +20,8 @@
     online_chain_covering :: pid(),
     events_added = 0 :: integer(),
     d_tuple :: lists:list(non_neg_integer()),
-    chain_key_prios = maps:new() :: maps:maps(any()), % map from priority to chainkey
+    chain_key_prios :: lists:list(integer() | atom()), % list from low to high priority
+%%    chain_key_prios = maps:new() :: maps:maps(any()), % map from priority to chainkey
     next_prio :: integer()
 }).
 
@@ -54,7 +55,8 @@ init([Config]) ->
             {ok, #state{
               d_tuple = DTuple,
               online_chain_covering = OnlineChainCovering,
-              next_prio = SizeDTuple
+              next_prio = SizeDTuple,
+              chain_key_prios = lists:duplicate(SizeDTuple, no_chain)
               }
             }
   end.
@@ -66,8 +68,10 @@ handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _F
     crashed = Crashed} = getLastStateOfHistory(History),
 %%  first update state
   State1 = update_state(State, CommInTransit),
+%%  erlang:display(["ChainKeysPrios after update", State1#state.chain_key_prios]),
 %%  then get next instruction
   {Instruction, State2} = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed, State1),
+%%  erlang:display(["ChainKeysPrios after getting", State2#state.chain_key_prios]),
   {reply, Instruction, State2};
 handle_call(_Request, _From, State = #state{}) ->
   erlang:throw("unhandled call"),
@@ -76,7 +80,8 @@ handle_call(_Request, _From, State = #state{}) ->
 handle_cast(_Request, State = #state{}) ->
   {noreply, State}.
 
-terminate(_Reason, _State = #state{}) ->
+terminate(_Reason, _State = #state{online_chain_covering = OCC}) ->
+  gen_server:stop(OCC),
   ok.
 
 %% internal functions
@@ -115,15 +120,18 @@ produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts,
       chain_key_prios = ChainKeyPrios
     } = State) ->
   CmdID = get_next_from_chains(ChainKeyPrios, OCC, MIL),
-  [{_, From, To, _, _, _}] = lists:filter(fun({ID, _, _, _, _, _}) -> ID == CmdID end, CommInTransit),
-  ArgsWithMIL = [MIL | [CmdID | [From | To]]],
-  Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
-  {Instruction, State}.
+  case  lists:filter(fun({ID, _, _, _, _, _}) -> ID == CmdID end, CommInTransit) of
+    [{_, From, To, _, _, _}] ->
+      ArgsWithMIL = [MIL, CmdID, From, To],
+      Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
+      {Instruction, State};
+    SomethingElse -> erlang:throw("did find this for ID in commands in transit: ~p", SomethingElse)
+  end.
 
--spec get_next_from_chains(map(), any(), any()) -> {map(), #instruction{}}.
+-spec get_next_from_chains([integer()], any(), any()) -> {map(), #instruction{}}.
 get_next_from_chains(ChainKeyPrios, OCC, MIL) ->
-  Prios = lists:reverse(lists:sort(maps:keys(ChainKeyPrios))),
-  recursively_get_next_from_chains(Prios, ChainKeyPrios, OCC, MIL).
+  Prios = lists:reverse(ChainKeyPrios),
+  recursively_get_next_from_chains(Prios, OCC, MIL).
 
 -spec get_kind_of_instruction() -> kind_of_instruction().
 get_kind_of_instruction() ->
@@ -139,38 +147,39 @@ update_state(#state{
   events_added = EventsAdded,
   online_chain_covering = OCC,
   d_tuple = DTuple,
-  chain_key_prios = ChainKeysPrios
+  chain_key_prios = ChainKeyPrios
   } = State,
     CommInTransit) ->
 %%  1) get list of chain keys affected (with order and multiplicity) and annotate them with events-added-index
   ChainKeysAffected = online_chain_covering:add_events(OCC, CommInTransit), % list with one entry per added cmd
+%%  erlang:display(["ChainKeysAffected", ChainKeysAffected]),
   ChainKeysAffectedUnique = sets:to_list(sets:from_list(ChainKeysAffected)),
-  OldChainKeys = maps:values(ChainKeysPrios),
+  OldChainKeys = ChainKeyPrios,
   NewChainKeys = lists:subtract(ChainKeysAffectedUnique, OldChainKeys),
 %%  1b) for each new chain_key, insert it
   ChainKeysPrios1 = lists:foldl(
     fun(ChainKey, ChainKeysPriosAcc) ->
       insert_chain_key_at_random_position(ChainKeysPriosAcc, ChainKey, DTuple) end,
-      ChainKeysPrios,
+    ChainKeyPrios,
       NewChainKeys),
   IndexList = lists:seq(EventsAdded, EventsAdded + length(ChainKeysAffected) - 1),
   IndexAndChainKeyAffected = lists:zip(IndexList, ChainKeysAffected),
 %%  2) for each affected chain key, check whether event-added-index is in dtuple and (re-)insert accordingly
-  ChainKeysPrios1 = lists:foldl(
+  ChainKeysPrios2 = lists:foldl(
     fun({Index, ChainKey}, ChainKeysPriosAcc) ->
       case in_d_tuple(Index, DTuple) of
         notfound ->
           ChainKeysPriosAcc;
         {found, IndexInDTuple1} -> % switch chainkey to the corresponding index
-          ChainKeysPriosAccTemp1 = maps:remove(EventsAdded + Index, ChainKeysPrios),
-          ChainKeysPriosAccTemp2 = maps:update(IndexInDTuple1, ChainKey, ChainKeysPriosAccTemp1),
+          ChainKeysPriosAccTemp1 = change_elem_in_list(ChainKey, ChainKeysPriosAcc, no_chain), % TODO: wrong index!?
+          ChainKeysPriosAccTemp2 = update_nth_list(IndexInDTuple1, ChainKeysPriosAccTemp1, ChainKey),
           ChainKeysPriosAccTemp2
       end
     end,
-    ChainKeysPrios,
+    ChainKeysPrios1,
     IndexAndChainKeyAffected
   ),
-  State#state{events_added = EventsAdded + length(ChainKeysAffected), chain_key_prios = ChainKeysPrios1}.
+  State#state{events_added = EventsAdded + length(ChainKeysAffected), chain_key_prios = ChainKeysPrios2}.
 
 -spec in_d_tuple(non_neg_integer(), list(non_neg_integer())) -> {found, non_neg_integer()} | notfound.
 in_d_tuple(NumDevPoints, DTuple) ->
@@ -179,7 +188,7 @@ in_d_tuple(NumDevPoints, DTuple) ->
   LenSuffix = length(SuffixDTuple),
   case LenSuffix == 0 of % predicate never got true so not in list
     true -> notfound;
-    false -> {found, length(DTuple) - LenSuffix} % index from 0
+    false -> {found, length(DTuple) - LenSuffix + 1} % index from 0 % TODO: fix sth here
   end.
 
 
@@ -196,48 +205,50 @@ produce_d_tuple(SizeDTuple, NumPossibleDevPoints) when SizeDTuple =< NumPossible
   {DTuple, _} = lists:foldl(HelperFunc, {[], AllNumbers}, Steps),
   DTuple.
 
-insert_chain_key_at_random_position(ChainKeysPriosAcc, ChainKey, DTuple) ->
-    SortedPrios = lists:sort(maps:keys(ChainKeysPriosAcc)),
-    {SortedPriosAboveD, _} = lists:partition(fun(Prio) -> Prio > length(DTuple) end, SortedPrios),
+insert_chain_key_at_random_position(ChainKeysPrios, ChainKey, DTuple) ->
+    PriosAboveD = lists:nthtail(length(DTuple), ChainKeysPrios),
     % randomly choose at which to insert
-    case SortedPriosAboveD of
+    case PriosAboveD of
       [] -> % no priorities above d
-        ok; % TODO
+        lists:reverse([ChainKey | lists:reverse(ChainKeysPrios)]);
       _ ->
-        Position = rand:uniform(length(SortedPriosAboveD)),
-        PrioBefore = lists:nth(Position, SortedPriosAboveD),
-        case Position < length(SortedPriosAboveD) of
-          true ->
-            PrioAfter = lists:nth(Position+1, SortedPriosAboveD),
-            case PrioAfter - PrioBefore > 1 of
-              false -> % no space so we double all prios above d to make space
-                ChainKeysPriosTemp = lists:foldl(
-                  fun(OrigPrio, ChainKeysPriosAccTemp) ->
-                    ChainKey = maps:get(OrigPrio, ChainKeysPriosAccTemp),
-                    ChainKeysPriosTempp1 = maps:remove(OrigPrio, ChainKeysPriosAccTemp),
-                    maps:update(4*OrigPrio, ChainKey, ChainKeysPriosTempp1)
-                  end,
-                  ChainKeysPriosAcc,
-                  SortedPriosAboveD
-                ),
-                maps:update(4*PrioBefore + trunc((4*PrioAfter - 4*PrioBefore)/2), ChainKey, ChainKeysPriosTemp);
-              true -> % can use some spot there, choose middle
-                maps:update(PrioBefore + trunc((PrioAfter - PrioBefore)/2), ChainKey, ChainKeysPriosAcc)
-            end;
-          false -> % chose last position so just add 20 indices later
-            maps:update(PrioBefore+20, ChainKey, ChainKeysPriosAcc)
-        end.
-    end,
+        Position = rand:uniform(length(PriosAboveD) + 1) - 1,
+        insert_elem_at_position_in_list(Position, ChainKey, ChainKeysPrios)
+    end.
 
-recursively_get_next_from_chains(Prios, ChainKeyPrios, OCC, MIL) ->
+recursively_get_next_from_chains(Prios, OCC, MIL) ->
   case Prios of
     [] -> erlang:throw("ran out of IDs in OCC even though there are commands in transit");
-    [MaxPrio | RemPrios] ->
-      ChainKeyMaxPrio = maps:get(MaxPrio, ChainKeyPrios),
+    [no_chain | RemPrios] ->
+      recursively_get_next_from_chains(RemPrios, OCC, MIL);
+    [ChainKeyMaxPrio | RemPrios] ->
       case online_chain_covering:get_first(OCC, ChainKeyMaxPrio) of
         empty -> % this chain was empty (for now)
-          recursively_get_next_from_chains(RemPrios, ChainKeyPrios, OCC, MIL);
-        ID -> ID % return ID and scheduler retrieves From and To
+          recursively_get_next_from_chains(RemPrios, OCC, MIL);
+        {found, ID} -> ID % return ID and scheduler retrieves From and To
       end
   end.
 
+insert_elem_at_position_in_list(Position, Elem, List) ->
+  rec_insert_elem_at_position_in_list(Position, Elem, [], List).
+
+rec_insert_elem_at_position_in_list(Position, Elem, RevPrefix, Suffix) ->
+  case Position of
+    0 -> lists:append(lists:reverse(RevPrefix), [Elem | Suffix]);
+    Pos1 -> case Suffix of
+      [] -> erlang:throw("list out of bounds");
+      [Head | Tail] -> rec_insert_elem_at_position_in_list(Pos1 - 1, Elem, [Head | RevPrefix], Tail)
+    end
+  end.
+
+update_nth_list(1, [_|Rest], New) -> [New|Rest];
+update_nth_list(I, [E|Rest], New) ->
+  case length([E|Rest]) < I of
+    true -> erlang:display(["Position", I, "List", [E|Rest]]);
+    false -> [E|update_nth_list(I-1, Rest, New)]
+  end.
+
+change_elem_in_list(_Old, [], _New) -> [];
+change_elem_in_list(Old, [E|Rest], New) ->
+  [case E == Old of true -> New; false -> E end |
+    change_elem_in_list(Old, Rest, New)].

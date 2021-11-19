@@ -68,10 +68,8 @@ handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _F
     crashed = Crashed} = getLastStateOfHistory(History),
 %%  first update state
   State1 = update_state(State, CommInTransit),
-%%  erlang:display(["ChainKeysPrios after update", State1#state.chain_key_prios]),
 %%  then get next instruction
   {Instruction, State2} = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed, State1),
-%%  erlang:display(["ChainKeysPrios after getting", State2#state.chain_key_prios]),
   {reply, Instruction, State2};
 handle_call(_Request, _From, State = #state{}) ->
   erlang:throw("unhandled call"),
@@ -125,7 +123,8 @@ produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts,
       ArgsWithMIL = [MIL, CmdID, From, To],
       Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
       {Instruction, State};
-    SomethingElse -> erlang:throw("did find this for ID in commands in transit: ~p", SomethingElse)
+    SomethingElse -> erlang:display(["foudn this for command:", SomethingElse]),
+      erlang:throw("did find this for ID in commands in transit: ~p")
   end.
 
 -spec get_next_from_chains([integer()], any(), any()) -> {map(), #instruction{}}.
@@ -152,7 +151,6 @@ update_state(#state{
     CommInTransit) ->
 %%  1) get list of chain keys affected (with order and multiplicity) and annotate them with events-added-index
   ChainKeysAffected = online_chain_covering:add_events(OCC, CommInTransit), % list with one entry per added cmd
-%%  erlang:display(["ChainKeysAffected", ChainKeysAffected]),
   ChainKeysAffectedUnique = sets:to_list(sets:from_list(ChainKeysAffected)),
   OldChainKeys = ChainKeyPrios,
   NewChainKeys = lists:subtract(ChainKeysAffectedUnique, OldChainKeys),
@@ -186,7 +184,7 @@ in_d_tuple(NumDevPoints, DTuple) ->
   HelperFunc = fun(X) -> X /= NumDevPoints end,
   SuffixDTuple = lists:dropwhile(HelperFunc, DTuple), % drops until it becomes NumDevPoints
   LenSuffix = length(SuffixDTuple),
-  case LenSuffix == 0 of % predicate never got true so not in list
+  case LenSuffix == 0 of % predicate never got true so not in list,
     true -> notfound;
     false -> {found, length(DTuple) - LenSuffix + 1} % index from 0 % TODO: fix sth here
   end.
@@ -213,12 +211,16 @@ insert_chain_key_at_random_position(ChainKeysPrios, ChainKey, DTuple) ->
         lists:reverse([ChainKey | lists:reverse(ChainKeysPrios)]);
       _ ->
         Position = rand:uniform(length(PriosAboveD) + 1) - 1,
-        insert_elem_at_position_in_list(Position, ChainKey, ChainKeysPrios)
+        insert_elem_at_position_in_list(Position + length(DTuple), ChainKey, ChainKeysPrios)
     end.
 
 recursively_get_next_from_chains(Prios, OCC, MIL) ->
+%%  Prios have been reversed before calling
   case Prios of
-    [] -> erlang:throw("ran out of IDs in OCC even though there are commands in transit");
+    [] ->
+      IDsInChains = online_chain_covering:get_all_ids_in_chains(OCC),
+      erlang:display(["IDsInChains", IDsInChains]),
+      erlang:throw("ran out of IDs in OCC even though there are commands in transit");
     [no_chain | RemPrios] ->
       recursively_get_next_from_chains(RemPrios, OCC, MIL);
     [ChainKeyMaxPrio | RemPrios] ->

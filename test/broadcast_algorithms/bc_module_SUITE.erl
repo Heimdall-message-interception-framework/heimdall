@@ -6,10 +6,10 @@
 -export([all/0, test_engine/1, test_module/1, init_per_testcase/2, test_scheduler_bfs/1, test_scheduler_pct/1]).
 
 all() -> [
-%%   test_module,
-%%   test_engine,
-%%   test_scheduler_bfs,
-    test_scheduler_pct
+   test_module,
+   test_engine,
+   test_scheduler_bfs,
+   test_scheduler_pct
 ].
 
 init_per_suite(Config) ->
@@ -92,7 +92,7 @@ test_scheduler_pct(InitialConfig) ->
     {observers, [causal_delivery]},
     {num_processes, 2},
     {bc_type, causal_broadcast},
-    {num_possible_dev_points, 50},
+    {num_possible_dev_points, 30},
     {size_d_tuple, 5}
   ]
   ++ InitialConfig),
@@ -100,6 +100,6 @@ test_scheduler_pct(InitialConfig) ->
   Conf2 = maps:put(listen_to, ListenTo, Conf),
   Timeout = 20000,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
-    MILInstructions, 1, 30, Timeout),
+    MILInstructions, 5, 30, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
 

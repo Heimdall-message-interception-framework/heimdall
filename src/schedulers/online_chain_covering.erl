@@ -12,7 +12,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0, start/1, add_events/2, get_first/2]).
+-export([start_link/0, start/1, add_events/2, get_first/2, get_all_ids_in_chains/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -26,6 +26,8 @@
   last_chain_container = undefined :: integer() | undefined,
   last_chain_key = undefined :: integer() | undefined,
   last_predecessors = sets:new() :: sets:set(any()),
+  did_use_one_since_adding = true :: boolean(),
+  % when we add events w/o get_first in between, a non-sched event was fired and we waive the last predecessors
   chain_map = maps:new() :: maps:map(integer(),
                                     maps:map(integer(), queue:queue({any(), sets:set(any())}))),
                                     % store cmd ids and predecessors
@@ -52,6 +54,9 @@ add_events(OCC, CommInTransit) ->
 get_first(OCC, ChainKey) ->
   gen_server:call(OCC, {get_first, ChainKey}).
 
+get_all_ids_in_chains(OCC) ->
+  gen_server:call(OCC, {get_all_ids_in_chains}).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
@@ -75,7 +80,13 @@ init([]) ->
   {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
   {stop, Reason :: term(), NewState :: #state{}}).
 handle_call({add_events, CommInTrans}, _From,
-    State = #state{command_ids_in_chains = IDsInChains}) ->
+    State = #state{command_ids_in_chains = IDsInChains, did_use_one_since_adding = FlagUseAfterAdding}) ->
+%%  0) set last predecessors to empty set if not used another sched command since adding last
+  State1 = case FlagUseAfterAdding of
+             true -> State;
+             false -> LastPreds1 = sets:new(),
+               State#state{last_predecessors = LastPreds1}
+           end,
 %%  1a) single out commands which are not in chain covering yet (maybe store ids in a set but keep consistent)
   AddedCommands = detect_added_commands_in_transit(IDsInChains, CommInTrans),
 %%  1b) partition them by receiver since they go in the same chain
@@ -83,35 +94,49 @@ handle_call({add_events, CommInTrans}, _From,
   RecipientsListUnique = remove_dups(lists:reverse(
     lists:foldl(fun({_, _, To, _, _, _}, AccListRev) -> [To | AccListRev] end, [], AddedCommands)
   )),
-  erlang:display(["AddedCommands", AddedCommands]),
-  erlang:display(["RecipientsListUnique", RecipientsListUnique]),
   % per recipient, construct a list of commands
   AddedCommandsByReceiver = lists:map(
     fun(Recipient) -> lists:filter(fun({_, _, To, _, _, _}) -> To == Recipient end, AddedCommands) end,
     RecipientsListUnique
   ),
-  erlang:display(["AddedCommandsByRcv", AddedCommandsByReceiver]),
   StrippedCommandsByReceiver = lists:map(
     fun(ListCmd) -> [ID || {ID, _, _, _, _, _} <- ListCmd] end,
     AddedCommandsByReceiver),
-  erlang:display(["StrippedCommandsByReceiver", StrippedCommandsByReceiver]),
 %%  2) for each command, insert it to chains
 %%  2a) for the first in list, use the chain from which we took the last event (cannot have other events as just happened)
-  {State1, RemainingCommandLists, ChainKeysAffected} =
-    insert_first_into_last_chain_if_applicable(StrippedCommandsByReceiver, State),
+  {State2, RemainingCommandLists, ChainKeysAffected} =
+    insert_first_into_last_chain_if_applicable(StrippedCommandsByReceiver, State1),
 %%  2b) for the remaining lists, check whether we can insert them in old ones one list by another
-  {State2, ChainKeysAffected1} = lists:foldl(
+  {State3, ChainKeysAffected1} = lists:foldl(
     fun(CmdList, {StateAcc, ChainKeysAffectedAcc}) ->
       insert_into_some_container(CmdList, ChainKeysAffectedAcc, StateAcc) end,
-    {State1, ChainKeysAffected},
+    {State2, ChainKeysAffected},
     RemainingCommandLists
   ),
 %%  3) update (remaining) state
-  State3 = State2#state{
-    command_ids_in_chains = sets:union(IDsInChains, sets:from_list(AddedCommands))
+  StrippedAddedCommandsSet = sets:from_list([ID || {ID, _, _, _, _, _} <- AddedCommands]),
+  FlagUseAfterAdding1 = case sets:is_empty(StrippedAddedCommandsSet) of
+                          true -> FlagUseAfterAdding; % haven't added anything so as previous
+                          false -> false
+                        end,
+  State4 = State3#state{
+    command_ids_in_chains = sets:union(IDsInChains, StrippedAddedCommandsSet),
+    did_use_one_since_adding = FlagUseAfterAdding1
   },
-  {reply, ChainKeysAffected1, State3};
-handle_call({get_first, ChainKey}, _From, State = #state{chain_map = ChainMap, last_events = LastEvents}) ->
+%%  4) check that commands in transit and ids in OCC match
+  IDsInChains1 = State4#state.command_ids_in_chains,
+  StrippedCommandsSet = sets:from_list([ID || {ID, _, _, _, _, _} <- CommInTrans]),
+  case (sets:is_subset(StrippedCommandsSet, IDsInChains1) and
+        sets:is_subset(IDsInChains1, StrippedCommandsSet)) of
+    false -> erlang:display(["CommInTrans", sets:to_list(StrippedCommandsSet), "IDsInChains1", sets:to_list(IDsInChains1)]),
+      erlang:throw("comm in trans and ids in chains do not match");
+    true -> ok
+  end,
+  {reply, ChainKeysAffected1, State4};
+handle_call({get_first, ChainKey}, _From,
+    State = #state{chain_map = ChainMap, last_events = LastEvents, command_ids_in_chains = IDsInChains}) ->
+%%  0) set flag that we used one since last adding commands
+  State1 = State#state{did_use_one_since_adding = true},
   {ContainerIndex, Chain} = get_container_and_chain_for_key(ChainKey, ChainMap),
   case queue:out(Chain) of
     {{value, {ID, Preds}}, Chain1} ->
@@ -120,16 +145,26 @@ handle_call({get_first, ChainKey}, _From, State = #state{chain_map = ChainMap, l
       Container = maps:get(ContainerIndex, ChainMap),
       Container1 = maps:update(ChainKey, Chain1, Container),
       ChainMap1 = maps:update(ContainerIndex, Container1, ChainMap),
-      % update last event from chainkey
+      % update last event from chainkey, only used when chain is empty
       LastEvents1 = maps:put(ChainKey, ID, LastEvents),
-      State1 = State#state{chain_map = ChainMap1,
+      IDsInChains1 = sets:del_element(ID, IDsInChains),
+      Preds1 = sets:add_element(ID, Preds),
+      State2 = State1#state{chain_map = ChainMap1,
         last_chain_key = ChainKey,
-        last_predecessors = Preds,
-        last_events = LastEvents1},
-      {reply, Reply, State1};
+        last_chain_container = ContainerIndex,
+        last_predecessors = Preds1,
+        last_events = LastEvents1,
+        command_ids_in_chains = IDsInChains1,
+        did_use_one_since_adding = true
+        },
+      {reply, Reply, State2};
     {empty, _} ->
-      {reply, empty, State}
+      {reply, empty, State1}
   end;
+handle_call({get_all_ids_in_chains}, _From,
+    State = #state{command_ids_in_chains = IDsInChains}) ->
+  IDsInChainsList = sets:to_list(IDsInChains),
+  {reply, IDsInChainsList, State};
 handle_call(_Request, _From, State = #state{}) ->
   erlang:throw("unhandled call"),
   {reply, ok, State}.
@@ -175,12 +210,13 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%%===================================================================
 
 detect_added_commands_in_transit(CommInChains, CommInTrans) ->
-  HelperPredicate = fun(ID) -> (not sets:is_element(ID, CommInChains)) end,
+  HelperPredicate = fun({ID, _, _, _, _, _}) -> (not sets:is_element(ID, CommInChains)) end,
   lists:filter(HelperPredicate, CommInTrans).
 
 insert_first_into_last_chain_if_applicable(AddedCommandsByReceiver,
     State = #state{last_chain_container = LastContainer, last_chain_key = LastChainKey,
-                   chain_map = ChainMap, last_predecessors = LastPreds}) ->
+                   chain_map = ChainMap, last_predecessors = LastPreds, did_use_one_since_adding = FlagUseAfterAdding})
+  when (AddedCommandsByReceiver /= []) and FlagUseAfterAdding -> % when used after adding still valid attempt
   case {LastContainer, LastChainKey} of
       {undefined, _} -> {State, AddedCommandsByReceiver, []};
       {_, undefined} -> {State, AddedCommandsByReceiver, []};
@@ -198,17 +234,20 @@ insert_first_into_last_chain_if_applicable(AddedCommandsByReceiver,
             State1 = State#state{chain_map = ChainMap1},
             {State1, RemCommandsList,
               lists:duplicate(length(FirstCommandList), LastChainKey)};
-          false -> % do not add them since they are concurrent
+          false -> % do not add them since they are concurrent, they cannot be dependent
             {State, AddedCommandsByReceiver, []}
         end
-    end.
+    end;
+insert_first_into_last_chain_if_applicable(AddedCommandsByReceiver,
+    State = #state{did_use_one_since_adding = _FlagUseAfterAdding}) ->
+%%  when AddedCommandsByReceiver == [] or not FlagUseAfterAdding ->
+  {State, AddedCommandsByReceiver, []}.
 
-insert_into_some_container(CmdList, ChainKeysAffected, State) ->
+  insert_into_some_container(CmdList, ChainKeysAffected, State) ->
   % iterate over chainmap and check whether there is either some chain in container to append or space
   SortedIndices = lists:sort(maps:keys(State#state.chain_map)),
   {State1, ChainKeysAffectedNew} =
     recursively_insert_into_some_container(SortedIndices, CmdList, State),
-%%  erlang:display(["ChainKeysAffectedPrev", ChainKeysAffected, "ChainKeysAffectedNew", ChainKeysAffectedNew]),
   ChainKeysAffected1 = lists:append(ChainKeysAffected, ChainKeysAffectedNew),
   {State1, ChainKeysAffected1}.
 
@@ -225,7 +264,6 @@ recursively_insert_into_some_container([], CmdList,
         chain_map = ChainMap1
       },
       ChainKeysAffectedNew = lists:duplicate(length(CmdList), NextChainKey),
-%%      erlang:display(["ChainKeysAffected new container", ChainKeysAffectedNew]),
       {State1, ChainKeysAffectedNew};
 recursively_insert_into_some_container([ContainerIndex | RemIndices], CmdList,
     State = #state{chain_map = ChainMap}) ->
@@ -236,7 +274,8 @@ recursively_insert_into_some_container([ContainerIndex | RemIndices], CmdList,
         {ChainKeyUpdated, ChainUpdated, ContainerWOUpdChain, NextChainKeyUpd} ->
           ChainMap2 = case ContainerIndex == 1 of
                         true -> % no need swap, so insert back and return
-                          maps:update(ChainKeyUpdated, ChainUpdated, ContainerWOUpdChain);
+                          Container1 = maps:put(ChainKeyUpdated, ChainUpdated, ContainerWOUpdChain),
+                          maps:update(1, Container1, ChainMap); % ContainerIndex==1
                         false -> % need to swap
                           LastContainerIndex = ContainerIndex - 1,
                           LastContainer = maps:get(LastContainerIndex, ChainMap),
@@ -248,8 +287,6 @@ recursively_insert_into_some_container([ContainerIndex | RemIndices], CmdList,
                       end,
           State1 = State#state{chain_map = ChainMap2, next_chain_key = NextChainKeyUpd},
           ChainKeysAffectedNew = lists:duplicate(length(CmdList), ChainKeyUpdated),
-%%          erlang:display(["CmdList", CmdList, "ChainKeysAffected old container", ChainKeysAffectedNew]),
-%%          erlang:display(["ChainKeyUpdated", ChainKeyUpdated]),
           {State1, ChainKeysAffectedNew}
       end.
 
@@ -278,18 +315,25 @@ recursively_insert_into_chain([], _CmdList, _Container, _LastPreds, _LastEvents)
       checked_all_chains;
 recursively_insert_into_chain([ChainKey | RemKeys], CmdList, Container, LastPreds, LastEvents) ->
       Chain = maps:get(ChainKey, Container),
-      case maps:get(ChainKey, LastEvents, undefined) of
-        undefined ->
-          recursively_insert_into_chain(RemKeys, CmdList, Container, LastPreds, LastEvents);
-        LastID ->
-          case sets:is_element(LastID, LastPreds) of
-            true -> % can insert
-              CmdListToInsert = paired_list_cmds_with_preds(CmdList, LastPreds),
-              Chain1 = queue:from_list(lists:append(queue:to_list(Chain), CmdListToInsert)),
-              {ChainKey, Chain1};
-            false -> % cannot insert so recurse
-              recursively_insert_into_chain(RemKeys, CmdList, Container, LastPreds, LastEvents)
-          end
+%%    get the "last" element of chain (may have been executed)
+      LastInChain =
+        case queue:is_empty(Chain) of
+          true ->
+            case maps:get(ChainKey, LastEvents, undefined) of
+              undefined ->
+                erlang:throw("existing chain without previous id...");
+%%                recursively_insert_into_chain(RemKeys, CmdList, Container, LastPreds, LastEvents);
+              LastID -> LastID
+            end;
+          false -> queue:daeh(Chain)
+        end,
+      case sets:is_element(LastInChain, LastPreds) of
+        true -> % can insert
+          CmdListToInsert = paired_list_cmds_with_preds(CmdList, LastPreds),
+          Chain1 = queue:from_list(lists:append(queue:to_list(Chain), CmdListToInsert)),
+          {ChainKey, Chain1};
+        false -> % cannot insert so recurse
+          recursively_insert_into_chain(RemKeys, CmdList, Container, LastPreds, LastEvents)
       end.
 
 remove_dups([])    -> [];

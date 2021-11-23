@@ -10,7 +10,7 @@
 
 -type sched_event_type() :: reg_node | reg_clnt
                           | cmd_rcv | cmd_rcv_crsh | exec_msg_cmd
-                          | enable_to | enable_to_crsh | disable_to
+                          | enable_to | enable_to_crsh | disable_to % to = timeout
                           | duplicat | snd_altr | drop_msg
                           | trns_crs | rejoin | perm_crs.
 
@@ -21,12 +21,13 @@
                   id = undefined :: number(),
                   name = undefined :: atom() | undefined,
                   class = undefined :: atom() | undefined,
-                  from = undefined :: atom() | undefined,
-                  to = undefined :: atom() | undefined,
+                  from = undefined :: pid() | atom() | nonempty_string() | undefined,
+                  to = undefined :: pid() | atom() | nonempty_string() | undefined,
 %%                  mesg = undefined :: any(),
 %%                  old_mesg = undefined :: any(),
                   skipped = undefined :: list(number()) | undefined,
                   mod = undefined :: atom() | undefined,
                   func = undefined :: atom() | undefined,
-                  args = undefined :: list(any()) | undefined
+                  args = undefined :: list(any()) | undefined,
+                  timerref = undefined :: reference() | undefined
 }).

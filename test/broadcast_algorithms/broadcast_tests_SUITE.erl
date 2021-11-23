@@ -16,25 +16,21 @@ groups() -> [
         [no_crash_test, with_crash_test, causal_ordering_test]
     },
     {rb_tests,
-        [no_crash_test, with_crash_test, causal_ordering_test]
+        [no_crash_test, with_crash_test]
     },
     {be_tests,
-        [no_crash_test, with_crash_test, causal_ordering_test]
+        [no_crash_test, with_crash_test]
     }
 ].
 
 init_per_group(rco_tests, Config) ->
     % register broadcast observer
-    gen_event:add_handler({global, om}, broadcast_observer, []),
     [{broadcast, causal_broadcast} | Config];
 init_per_group(rb_tests, Config) ->
     % register broadcast observer
-    gen_event:add_handler({global, om}, broadcast_observer, []),
     [{broadcast, reliable_broadcast} | Config];
 init_per_group(be_tests, Config) ->
     % register broadcast observer
-    gen_event:add_handler({global, om}, broadcast_observer, []),
-    gen_event:add_handler({global, om}, universal_observer, []),
     [{broadcast, best_effort_broadcast_paper} | Config].
 
 end_per_group(_GroupName, _Config) ->
@@ -42,29 +38,53 @@ end_per_group(_GroupName, _Config) ->
 
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
-  % create observer manager
-  {ok, _} = gen_event:start({global, om}),
   Config.
 
 end_per_suite(_Config) ->
   _Config.
 
-init_per_testcase(TestCase, Config) ->
+init_per_testcase(causal_ordering_test, Config) ->
+  % create observer manager
+  {ok, _} = gen_event:start({global, om}),
+  TestCase = causal_ordering_test,
+
   {_, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
   logger:add_handler(readable_handler, logger_std_h, ConfigReadable),
   {_, ConfigMachine} = logging_configs:get_config_for_machine(TestCase),
   logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
 
   % create message interception layer
-  {ok, Scheduler} = scheduler_naive:start(),
-  {ok, MIL} = message_interception_layer:start(Scheduler),
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
   application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
-  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-  gen_server:cast(MIL, {start}),
+  commands_transfer_helper:start(CTH),
 
+  NewConfig = Config ++ [{listen_to, ["bc1_rco", "bc2_rco", "bc3_rco"]}],
+  gen_event:add_handler({global, om}, causal_delivery, [maps:from_list(NewConfig)]),
+
+  Config;
+init_per_testcase(TestCase, Config) ->
+  % create observer manager
+  {ok, _} = gen_event:start({global, om}),
+
+  {_, ConfigReadable} = logging_configs:get_config_for_readable(TestCase),
+  logger:add_handler(readable_handler, logger_std_h, ConfigReadable),
+  {_, ConfigMachine} = logging_configs:get_config_for_machine(TestCase),
+  logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
+
+  % create message interception layer
+  {ok, MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(MIL),
+  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+  commands_transfer_helper:start(CTH),
   Config.
 
 end_per_testcase(_, Config) ->
+  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
+  gen_server:stop(MIL),
+  gen_event:stop({global, om}),
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),
   Config.
@@ -108,7 +128,7 @@ no_crash_test(Config) ->
     receive {Chat1, ok} -> ok end,
 
     % finish exchanging messages
-    timer:sleep(200),
+    timer:sleep(1000),
 
     % check that all chat-servers got the message:
     Chat1 ! {get_received, self()},
@@ -145,7 +165,7 @@ with_crash_test(Config) ->
     receive {Chat1, ok} -> ok end,
 
     % wait for messages to be delivered
-    timer:sleep(100),
+    timer:sleep(1000),
 
     Chat1 ! {get_received, self()},
     Chat3 ! {get_received, self()},
@@ -155,6 +175,7 @@ with_crash_test(Config) ->
     basic_tests_SUITE:assert_equal(['Hello everyone!'], Received3).
 
 causal_ordering_test(Config) ->
+    io:format("handlers before: ~p~n" , [gen_event:which_handlers({global,om})]),
     % Create link layer for testing:
     {ok, LL} = link_layer_simple:start(),
 
@@ -167,6 +188,7 @@ causal_ordering_test(Config) ->
     % post a message to chatserver 1
     Chat1 ! {post, self(), 'Hello everyone!'},
     Chat2 ! {post, self(), 'Hello from 2!'},
+    timer:sleep(1000),
     Chat1 ! {post, self(), 'My name is Marvin!'},
     receive {Chat1, ok} -> ok end,
     receive {Chat1, ok} -> ok end,
@@ -183,13 +205,13 @@ causal_ordering_test(Config) ->
     receive {Chat2, Received2} -> ok end,
     receive {Chat3, Received3} -> ok end,
     ValidOrderings = [
-        ['Hello from 2!', 'My name is Marvin!', 'Hello everyone!'],
         ['My name is Marvin!', 'Hello from 2!', 'Hello everyone!'],
         ['My name is Marvin!', 'Hello everyone!', 'Hello from 2!']
     ],
     ?assert(lists:member(Received1, ValidOrderings)),
     ?assert(lists:member(Received2, ValidOrderings)),
-    ?assert(lists:member(Received3, ValidOrderings)).
+    ?assert(lists:member(Received3, ValidOrderings)),
+    io:format("handlers after: ~p~n" , [gen_event:which_handlers({global,om})]).
     % basic_tests_SUITE:assert_equal(Received1, Received2).
     % basic_tests_SUITE:assert_equal(Received2, Received3).
     % basic_tests_SUITE:assert_equal(['Hello everyone!'], Received1),

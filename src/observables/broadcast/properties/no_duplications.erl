@@ -17,7 +17,7 @@
 -spec check_no_duplications(bc_message(), process_identifier(), #state{}) -> boolean().
 check_no_duplications(Msg, Proc, State) -> 
     % check if message was already delivered
-    IsDuplicate = sets:is_element(Msg, maps:get(Proc, State#state.delivered_p)),
+    IsDuplicate = sets:is_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
     OldValidity = maps:get(Proc, State#state.validity_p, true),
     case IsDuplicate of
         true -> false; % duplicate detected, set validity to false
@@ -38,11 +38,13 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
     {ok, State#state{
         delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p),
         validity_p = maps:put(Proc, NewValidity, State#state.validity_p)}};
-handle_event(Event, State) ->
-    io:format("[no_duplications_prop] received unhandled event: ~p~n", [Event]),
+handle_event(_Event, State) ->
+    % io:format("[no_duplications_prop] received unhandled event: ~p~n", [_Event]),
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.
+handle_call(get_result, State) -> 
+    {ok, State#state.validity_p, State};
 handle_call(get_validity, State) ->
     {ok, State#state.validity_p, State};
 handle_call({get_validity, Proc}, State) ->

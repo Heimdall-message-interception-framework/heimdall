@@ -18,7 +18,7 @@
 -record(state, {
     % if set to true, we send updates about our state TODO: this needs to be implemented
     armed = false :: boolean(),
-    processes = sets:new() :: sets:set(process_identifier()),
+    listen_to = sets:new() :: sets:set(process_identifier()),
     validity_p = maps:new() :: #{process_identifier() => boolean()},
     errors = [] :: list(#error{}),
     delivered_p = maps:new() :: #{process_identifier() => sets:set(bc_message())}
@@ -30,7 +30,7 @@ check_agreement(Msg, Proc, State) ->
     % check if message was already delivered by every other process
     AllProcesses = maps:keys(State#state.delivered_p),
     NotDeliveredBy = lists:filter(
-        fun (P) -> not sets:is_element(Msg, maps:get(P, State#state.delivered_p)) end,
+        fun (P) -> not sets:is_element(Msg, maps:get(P, State#state.delivered_p, sets:new())) end,
         AllProcesses),
     NewErrors = update_errors(Msg, AllProcesses, NotDeliveredBy, State#state.errors),
 
@@ -47,10 +47,13 @@ check_agreement(Msg, Proc, State) ->
             errors = NewErrors
         };
         % this process delivered something that is not yet delivered by all other processes,
-        % set it to invalid
-        _ -> State#state{
-            validity_p = maps:put(Proc, false, State#state.validity_p),
-            errors = NewErrors
+        % set all other processes to invalid
+        _ -> 
+            OtherProcs = [P || P <- AllProcesses, P =/= Proc],
+            State#state{
+                validity_p = lists:foldl(fun(P, Acc) -> maps:put(P, false, Acc) end,
+                    State#state.validity_p, OtherProcs), 
+                errors = NewErrors
         }
     end.
     
@@ -72,23 +75,36 @@ update_errors(Msg, AllProcesses, NotDeliveredBy, OldErrs) ->
             }]
         end.
 
-init(_) ->
-    {ok, #state{}}.
+init([Config]) ->
+    ListenTo = maps:get(listen_to, Config, []),
+    {ok, #state{
+        listen_to = sets:from_list(ListenTo),
+        validity_p = maps:from_list(lists:map(fun(Proc) -> {Proc, true} end, ListenTo)),
+        delivered_p = maps:from_list(lists:map(fun(Proc) -> {Proc, sets:new()} end, ListenTo))
+    }}.
 
 % handles delivered messages
 -spec handle_event(_, #state{}) -> {'ok', #state{}}.
-handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) ->
-    % add message to set of delivered messages
-    NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
+handle_event({process, #obs_process_event{process = Proc, event_type = bc_delivered_event, event_content = #bc_delivered_event{message = Msg}}}, State) -> 
+    HandleMessage = sets:is_element(Proc, State#state.listen_to),
+    
+    % only handle message if we listen to this process
+    if HandleMessage ->
+        % add message to set of delivered messages
+        NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
 
-    % check agreement property
-    {ok, check_agreement(Msg, Proc, 
-        State#state{delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p)})};
-handle_event(Event, State) ->
-    io:format("[agreement_prop] received unhandled event: ~p~n", [Event]),
+        % check agreement property
+        {ok, check_agreement(Msg, Proc, 
+            State#state{delivered_p = maps:put(Proc, NewDeliveredMessages, State#state.delivered_p)})}; 
+    true -> {ok,State}
+end;
+handle_event(_Event, State) ->
+    % io:format("[agreement_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.
+handle_call(get_result, State) -> 
+    {ok, State#state.validity_p, State};
 handle_call(get_validity, State) ->
     {ok, State#state.validity_p, State};
 handle_call({get_validity, Proc}, State) ->

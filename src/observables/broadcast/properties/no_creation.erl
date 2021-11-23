@@ -45,10 +45,12 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
         delivered = NewDeliveredMessages,
         validity_p = maps:put(Proc, NewValidity, State#state.validity_p)}};
 handle_event(Event, State) ->
-    io:format("[no_creation_prop] received unhandled event: ~p~n", [Event]),
+    % io:format("[no_creation_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 
 -spec handle_call(_, #state{}) -> {'ok', 'unhandled', #state{}} | {'ok', boolean() | #{process_identifier() => boolean()}, #state{}}.
+handle_call(get_result, State) -> 
+    {ok, State#state.validity_p, State};
 handle_call(get_validity, State) ->
     {ok, State#state.validity_p, State};
 handle_call({get_validity, Proc}, State) ->

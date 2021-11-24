@@ -18,8 +18,19 @@
 %% TODO: solve how to use record as types...
 %%-type obs_sched_event() :: sched_event(). % wrong type, also record here
 
+-type process_identifier() :: pid() | atom() | nonempty_string().
+
 -record(obs_process_event, {
-  process :: pid() | atom(),
-  event_type :: any(),
+  process :: process_identifier(),
+  event_type :: atom(),
   event_content :: any()
+}).
+
+%% TODO: move to its own file (or merge others to this one)
+%% process-local broadcast events
+-record(bc_broadcast_event, { % newly broadcast message
+  message :: any() % the message
+}).
+-record(bc_delivered_event, { % newly delivered message
+  message :: any() % the message
 }).

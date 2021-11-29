@@ -18,7 +18,7 @@
 %% API for scheduling engine
 -export([no_op/1, exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
 %% Getters
--export([get_commands_in_transit/1, get_timeouts/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1]).
+-export([get_commands_in_transit/1, get_timeouts/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1, get_name_for_pid/1]).
 
 -record(state, {
   registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
@@ -90,9 +90,7 @@ drop_msg_command(MIL, Id, From, To) ->
   gen_server:call(MIL, {drop, {Id, From, To}}).
 %%
 fire_timeout(MIL, Proc, TimerRef) ->
-%%  erlang:display(["fire_to", TimerRef]),
-  Result = gen_server:call(MIL, {fire_to, {Proc, TimerRef}}),
-  Result.
+  gen_server:call(MIL, {fire_to, {Proc, TimerRef}}).
 %%
 transient_crash(MIL, Name) ->
   ok = gen_server:call(MIL, {crash_trans, {Name}}).
@@ -116,12 +114,17 @@ get_timeouts(MIL) ->
 get_all_node_names(MIL) ->
   gen_server:call(MIL, {get_all_node_names}).
 %%
+get_name_for_pid(Pid) ->
+  [{_, Name}] = ets:lookup(pid_name_table, Pid),
+  Name.
+%%
 -spec get_transient_crashed_nodes(pid()) -> sets:set().
 get_transient_crashed_nodes(MIL) ->
   gen_server:call(MIL, {get_transient_crashed_nodes}).
 %%
 get_permanent_crashed_nodes(MIL) ->
   gen_server:call(MIL, {get_permanent_crashed_nodes}).
+
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
@@ -139,6 +142,7 @@ start_link() ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
+  ets:new(pid_name_table, [named_table, {read_concurrency, true}, protected]),
   {ok, #state{}}.
 
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -225,6 +229,7 @@ handle_call({get_timeouts}, _From, State = #state{}) ->
 %   {stop, Reason :: term(), NewState :: #state{}}).
 %%
 handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
+  ets:insert(pid_name_table, {NodePid, NodeName}),
   NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
   NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names_from_state(State),

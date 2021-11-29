@@ -34,3 +34,14 @@
 -record(bc_delivered_event, { % newly delivered message
   message :: any() % the message
 }).
+
+-record(statem_transition_event, {
+  state :: {keep_state | repeat_state | next_state, any()},
+  data :: {keep_data | repeat_data | next_data, any()}
+}).
+
+-record(statem_stop_event, {
+  reason = undefined :: any() | undefined,
+  replies = undefined :: any() | undefined,
+  data = undefined :: any() | undefined
+}).

@@ -39,6 +39,8 @@ handle_event({process,
             ra_machine_reply_read -> {true, State1};
             ra_machine_side_effects -> {true, State1};
             ra_server_state_variable -> {true, State1};
+            statem_transition_event -> {true, State1};
+            statem_stop_event -> {true, State1};
             _ -> erlang:display("unmatched event")
         end,
     case PropSat of
@@ -53,10 +55,9 @@ handle_event({sched, SchedEvent}, State) ->
     NewState = add_to_history(State, {sched, SchedEvent}),
     % TO ADD: do sth. concrete here
     {ok, NewState};
-
-handle_event(Event, State) ->
-    erlang:display("unhandled raft event:"),
-    erlang:display(Event),
+handle_event(_Event, State) ->
+%%    erlang:display("unhandled raft event:"),
+%%    erlang:display(Event),
     {ok, State}.
 
 handle_call(get_result, #state{property_satisfied = PropSat} = State) ->
@@ -70,7 +71,9 @@ add_to_history(State, GeneralEvent) ->
     State#state{history_of_events = NewHistory}.
 
 handle_log_request(Proc, #ra_log_obs_event{idx = Idx, term = Term, data = Data},
+%%    TODO: update and unify with state predicate
     #state{process_to_log_map = ProcLogMap} = State) ->
+%%    erlang:display(["Idx", Idx]),
     ArrayLog = case maps:get(Proc, ProcLogMap, undefined) of
         undefined ->  %
             array:set(10, true, array:new());

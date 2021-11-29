@@ -20,6 +20,7 @@
 -module(gen_mi_statem).
 
 -include_lib("kernel/include/logger.hrl").
+-include("observer_events.hrl").
 
 %%%
 %%% NOTE: If init_ack() return values are modified, see comment
@@ -1339,7 +1340,7 @@ loop_state_callback_result(
   StateCall, Result) ->
     %%
 %%  here, we can switch on posting events in state machine
-%%    post_observation_events(State, _Data, Result, StateCall),
+    post_observation_events(State, _Data, Result, StateCall),
     case Result of
 	{next_state,State,NewData} ->
             loop_actions(
@@ -2938,61 +2939,81 @@ list_timeouts(Timers) ->
                [{TimeoutType,TimeoutMsg}|Acc]
        end, [], Timers)}.
 
+%% OBS
 %%%% function to output callback_result as events for observer
-%%post_observation_events(PrevState, _PrevData, Result, StateCall) ->
-%%  case Result of
-%%    {next_state,State,NewData} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, State}, {new_data, NewData}}});
-%%    {next_state,NextState,NewData}
-%%      when StateCall ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, NextState}, {new_data, NewData}}});
-%%    {next_state,_NextState,_NewData} ->
-%%%%      for completeness
-%%      ok;
-%%    {next_state,State,NewData,_Actions} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, State}, {new_data, NewData}}});
-%%    {next_state,NextState,NewData,_Actions}
-%%      when StateCall ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{new_state, NextState}, {new_data, NewData}}});
-%%    {next_state,_NextState,_NewData,_Actions} ->
-%%%%      for completeness
-%%      ok;
-%%    %%
-%%    {keep_state,NewData} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, NewData}}});
-%%    {keep_state,NewData,_Actions} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, NewData}}});
-%%    %%
-%%    keep_state_and_data ->
-%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, PrevData}}});
-%%      ok;
-%%    {keep_state_and_data,_Actions} ->
-%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {new_data, PrevData}}});
-%%      ok;
-%%    %%
-%%    {repeat_state,NewData} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, NewData}}});
-%%    {repeat_state,NewData,_Actions} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, NewData}}});
-%%    %%
-%%    repeat_state_and_data ->
-%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, PrevData}}});
-%%      ok;
-%%    {repeat_state_and_data,_Actions} ->
-%%%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {new_data, PrevData}}});
-%%      ok;
-%%    %%
-%%    stop ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}}});
-%%    {stop,Reason} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}}});
-%%    {stop,Reason,NewData} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {new_data, NewData}}});
-%%    %%
-%%    {stop_and_reply,Reason,Replies} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {replies, Replies}}});
-%%    {stop_and_reply,Reason,Replies,NewData} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{stop}, {reason, Reason}, {replies, Replies}, {new_data, NewData}}});
-%%    %%
-%%    _ -> ok
-%%  end.
+post_observation_events(PrevState, _PrevData, Result, StateCall) ->
+  case Result of
+    {next_state,State,NewData} ->
+      Event = #statem_transition_event{state = {next_state, State}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {next_state,NextState,NewData}
+      when StateCall ->
+      Event = #statem_transition_event{state = {next_state, NextState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {next_state,_NextState,_NewData} ->
+%%      for completeness
+      ok;
+    {next_state,State,NewData,_Actions} ->
+      Event = #statem_transition_event{state = {next_state, State}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {next_state,NextState,NewData,_Actions}
+      when StateCall ->
+      Event = #statem_transition_event{state = {next_state, NextState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {next_state,_NextState,_NewData,_Actions} ->
+%%      for completeness
+      ok;
+    {keep_state,NewData} ->
+      Event = #statem_transition_event{state = {keep_state, PrevState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {keep_state,NewData,_Actions} ->
+      Event = #statem_transition_event{state = {keep_state, PrevState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    %%
+    keep_state_and_data ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
+      ok;
+    {keep_state_and_data,_Actions} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
+      ok;
+    %%
+    {repeat_state,NewData} ->
+      Event = #statem_transition_event{state = {repeat_state, PrevState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    {repeat_state,NewData,_Actions} ->
+      Event = #statem_transition_event{state = {repeat_state, PrevState}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
+    %%
+    repeat_state_and_data ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
+      ok;
+    {repeat_state_and_data,_Actions} ->
+%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
+      ok;
+    %%
+    stop ->
+      Event = #statem_stop_event{},
+      notify_about_statem_event(Event, statem_stop_event);
+    {stop,Reason} ->
+      Event = #statem_stop_event{reason = Reason},
+      notify_about_statem_event(Event, statem_stop_event);
+    {stop,Reason,NewData} ->
+      Event = #statem_stop_event{reason = Reason, data = NewData},
+      notify_about_statem_event(Event, statem_stop_event);
+    %%
+    {stop_and_reply,Reason,Replies} ->
+      Event = #statem_stop_event{reason = Reason, replies = Replies},
+      notify_about_statem_event(Event, statem_stop_event);
+    {stop_and_reply,Reason,Replies,NewData} ->
+      Event = #statem_stop_event{reason = Reason, replies = Replies, data = NewData},
+      notify_about_statem_event(Event, statem_stop_event);
+    %%
+    _ -> ok
+  end.
+
+notify_about_statem_event(Event, EvType) ->
+  ProcName = message_interception_layer:get_name_for_pid(self()),
+  ProcEvent = #obs_process_event{process = ProcName, event_type = EvType, event_content = Event},
+  gen_event:sync_notify({global, om}, {process, ProcEvent}).
+
+%% SBO

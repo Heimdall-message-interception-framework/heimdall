@@ -45,6 +45,8 @@ handle_event({process,
             ra_machine_reply_read -> {true, State1};
             ra_machine_side_effects -> {true, State1};
             ra_server_state_variable -> handle_state_variable_event(Proc, EvContent, State);
+            statem_transition_event -> {true, State1};
+            statem_stop_event -> {true, State1};
             _ -> erlang:display("unmatched event")
         end,
     case PropSat of
@@ -60,9 +62,9 @@ handle_event({sched, SchedEvent}, State) ->
     % TO ADD: do sth. concrete here
     {ok, NewState};
 
-handle_event(Event, State) ->
-    erlang:display("unhandled raft event:"),
-    erlang:display(Event),
+handle_event(_Event, State) ->
+%%    erlang:display("unhandled raft event:"),
+%%    erlang:display(Event),
     {ok, State}.
 
 handle_call(get_result, #state{property_satisfied = PropSat} = State) ->

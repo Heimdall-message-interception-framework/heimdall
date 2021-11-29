@@ -186,6 +186,7 @@ read_observer(Observer) ->
     Result = gen_event:call({global,om}, Observer, get_result),
     case Result of
         Bool when (Bool =:= true) or (Bool =:= false) -> [{atom_to_list(Observer), Bool}];
+%%        @JH: minor but is there any reason not to use maps:map?
         Map -> lists:map(fun({Key,Val}) -> {atom_to_list(Observer) ++ "_" ++ Key, Val} end,
             maps:to_list(Map))
     end.

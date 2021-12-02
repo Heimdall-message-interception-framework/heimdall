@@ -32,7 +32,8 @@ get_observers() -> [
     raft_leader_completeness,
     raft_log_matching,
     raft_state_machine_safety,
-    raft_template
+    raft_template,
+    raft_abstract_state_predicate
 ].
 
 bootstrap_wo_scheduler() ->

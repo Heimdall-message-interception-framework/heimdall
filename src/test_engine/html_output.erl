@@ -1,0 +1,230 @@
+-module(html_output).
+-behaviour(gen_server).
+-include("test_engine_types.hrl").
+
+-export([init/1, handle_cast/2, handle_info/2, handle_call/3, output_html/3]).
+
+-record(state, {}).
+
+init([]) ->
+    {ok,#state{}}.
+
+-spec handle_call(_, _, _) -> none().
+handle_call({output_html, Name, History}, _From, State) ->
+    Html = history_to_html(erlang_to_string(Name), History),
+    write_file(Html, erlang_to_string(Name) ++ ".hmtl"),
+    {reply, ok, State};
+handle_call(Msg, From, State) ->
+    erlang:error("[~p] received unhandled call ~p from ~p", [?MODULE, Msg, From]),
+    {stop, unhandled_call, State}.
+
+handle_cast({output_html, Name, History}, State) ->
+    Html = history_to_html(erlang_to_string(Name), History),
+    write_file(Html, erlang_to_string(Name) ++ ".hmtl"),
+    {noreply, State};
+handle_cast(Msg, State) ->
+    erlang:error("[~p] received unhandled cast ~p", [?MODULE, Msg]),
+    {stop, unhandled_cast, State}.
+
+handle_info(Info, State) ->
+    io:format("[~p] received info: ~p~n", [?MODULE, Info]),
+    {noreply, State}.
+
+
+%%====================================================================
+%% API functions
+%%====================================================================
+
+-spec output_html(atom() | pid() | {atom(), _} | {'via', _, _}, _, _) -> 'ok'.
+output_html(HtmlMod, Name, History) ->
+    gen_server:call(HtmlMod, {output_html, Name, History}, infinity).
+
+%%====================================================================
+%% Internal functions
+%%====================================================================
+
+-spec write_file(binary() | maybe_improper_list(binary() | maybe_improper_list(any(), binary() | []) | char(), binary() | []), atom() | binary() | [atom() | [any()] | char()]) -> 'ok' | {'error', atom()}.
+write_file(String, Filename) ->
+    io:format("[~p] Writing file ~p~n", [?MODULE, Filename]),
+    file:write_file(Filename, unicode:characters_to_binary(String)).
+
+-spec erlang_to_string(any()) -> string().
+erlang_to_string(Erl) -> 
+    io_lib:format("~p", [Erl]).
+
+-spec history_to_html(nonempty_string(), history()) -> nonempty_string().
+history_to_html(Name, History) ->
+    Steps = lists:reverse(lists:seq(0, length(History) -1)),
+    HistoryWithSteps = lists:reverse(lists:zip(Steps, History)),
+    StepsAsHTML = lists:map(fun(S) -> step_to_html(S) end, HistoryWithSteps),
+    html_prefix(Name) ++ 
+    "
+    <ul class=\"list-group\">
+        <li class=\"list-group-item\">
+            <div class=\"header row\">
+                <div class=\"col\">#</div>
+                <div class=\"col\">instruction</div>
+                <div class=\"col\">properties</div>
+                <div class=\"col\">commands in transit</div>
+                <div class=\"col\">nodes</div>
+                <div class=\"col\">timeouts</div>
+                <div class=\"col\">crashes</div>
+            </div>
+        </li>
+        " ++ lists:flatten(StepsAsHTML) ++ "
+        </ul>" ++
+    html_postfix().
+
+-spec step_to_html({integer(), {#instruction{}, #prog_state{}}}) -> nonempty_string().
+step_to_html({Index, {#instruction{module= Module, function=Function, args= Args}, #prog_state{properties = Properties,
+    commands_in_transit = CommandsInTransit,
+    timeouts = Timeouts, nodes = Nodes, crashed = Crashed}}}) ->
+        % format command name
+        CommandName = io_lib:format("~p: ~p", [Module, Function]),
+        % format properties
+        PropertiesCount = maps:size(Properties),
+        PropertiesValidCount = length(lists:filter(fun(X) -> X end, maps:values(Properties))),
+        PropertiesFormatted = case PropertiesValidCount < PropertiesCount of
+            true -> io_lib:format("<span class=\"prop-invalid\">~p</span>/~p", [PropertiesValidCount, PropertiesCount]);
+            false -> io_lib:format("~p/~p", [PropertiesValidCount, PropertiesCount])
+        end,
+        Detailsname = "stepDetails"++erlang_to_string(Index),
+"<li class=\"list-group-item li-collapsed clickable step\">
+    <a class=\"toggle\" data-bs-toggle=\"collapse\" href=\"#"++Detailsname++"\" role=\"button\" aria-expanded=\"false\"
+        aria-controls=\""++Detailsname++"\">"
+    "<div class=\"row\">
+                <div class=\"col\">"++ erlang_to_string(Index) ++"</div>
+                <div class=\"col\">"++ CommandName ++ "</div>
+                <div class=\"col\">"++ PropertiesFormatted ++ "</div>
+                <div class=\"col\">"++ erlang_to_string(length(CommandsInTransit)) ++"</div>
+                <div class=\"col\">"++ erlang_to_string(length(Nodes))++"</div>
+                <div class=\"col\">"++ erlang_to_string(length(Timeouts))++"</div>
+                <div class=\"col\">"++ erlang_to_string(length(Crashed))++"</div>
+    </div></a>"
+    "<div class=\"collapse\" id=\""++ Detailsname ++"\">
+                <div class=\"card card-body details\">
+                    <span class=\"state-property\">Instruction</span>
+                    "++ erlang_to_string(#instruction{module= Module, function=Function, args= Args}) ++"
+                    <span class=\"state-property\">Properties</span>
+                    "++ erlang_to_string(Properties) ++ "
+                    <span class=\"state-property\">Commands in Transit</span>
+                    "++ erlang_to_string(lists:reverse(CommandsInTransit)) ++"
+                    <span class=\"state-property\">Nodes</span>
+                    "++ erlang_to_string(Nodes) ++"
+                    <span class=\"state-property\">Timeouts</span>
+                    "++ erlang_to_string(Timeouts) ++"
+                    <span class=\"state-property\">Crashes</span>
+                    "++ erlang_to_string(Crashed) ++"
+                </div>
+            </div>
+</li>".
+
+html_prefix(Title) ->
+"<!doctype html>
+<html lang=\"en\">
+
+<head>
+    <!-- Required meta tags -->
+    <meta charset=\"utf-8\">
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
+
+    <!-- Bootstrap CSS -->
+    <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css\" rel=\"stylesheet\"
+        integrity=\"sha384-1BmE4kWBq78iYhFldvKuhfTAU6auU8tT94WrHftjDbrCEXSU1oBoqyl2QvZ6jIW3\" crossorigin=\"anonymous\">
+
+    <title>"++ Title ++"</title>
+    <style>
+        tr:hover {
+            background: rgb(137, 171, 235);
+        }
+
+        td a {
+            display: block;
+            border: 0px solid black;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        td a:hover {
+            color: inherit;
+        }
+
+        li a {
+            display: block;
+            border: 0px solid black;
+            text-decoration: none;
+            color: inherit;
+        }
+
+        li a:hover {
+            color: inherit;
+        }
+
+        /* li.li-collapsed:hover { */
+        li.clickable:hover {
+            background: rgb(230, 230, 230);
+        }
+
+        .tr-hidden {
+            max-height: 0;
+            visibility: collapse;
+            overflow: hidden;
+            transition: visibility 0.2s ease-out;
+        }
+
+        .header {
+            font-weight: bold;
+        }
+
+        .cell {
+            width: 15%;
+        }
+
+        .details {
+            margin-top: 5px;
+        }
+
+        .state-property {
+            font-weight: bold;
+        }
+
+        .state-property::after {
+            content: \":\";
+        }
+
+        .prop-invalid {
+            color: red;
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Optional JavaScript; choose one of the two! -->
+
+    <!-- Option 1: Bootstrap Bundle with Popper -->
+    <!-- <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js\" integrity=\"sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p\" crossorigin=\"anonymous\"></script> -->
+
+    <!-- Option 2: Separate Popper and Bootstrap JS -->
+    <!--<script src=\"https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js\"
+        integrity=\"sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB\"
+        crossorigin=\"anonymous\"></script> -->
+    <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js\"
+        integrity=\"sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13\"
+        crossorigin=\"anonymous\"></script>
+".
+
+html_postfix() ->
+"    <script>
+        var toggle = document.getElementsByClassName(\"toggle\");
+        var i;
+        console.log(toggle.length);
+
+        for (i = 0; i < toggle.length; i++) {
+            toggle[i].addEventListener(\"click\", function () {
+                var parent = this.closest('li');
+                parent.classList.toggle('li-collapsed');
+            });
+        }
+    </script>
+</body>
+</html>".

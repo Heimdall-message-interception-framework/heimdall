@@ -6,14 +6,15 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, explore/3, explore/6, explore/7]).
 
 % a run consists of an id and a history
--type run() :: {pos_integer(), history()}.
+-type run() :: {pos_integer() | 0, history()}.
 
 -record(state, {
     runs = []:: [run()],
     next_id = 0 :: 0 | pos_integer(),
     bootstrap_scheduler = undefined :: atom(),
     scheduler = undefined :: atom(),
-    sut_module :: atom()
+    sut_module :: atom(),
+    html_module :: pid()
 }).
 %%% API functions
 
@@ -30,7 +31,7 @@
 -spec explore(pid(), atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer()) -> [{pos_integer(), history()}].
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length) ->
     gen_server:call(TestEngine,
-        {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}).
+        {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, infinity).
 -spec explore(pid(), atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer(), pos_integer() | infinity) -> [{pos_integer(), history()}].
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout) ->
     gen_server:call(TestEngine,
@@ -42,10 +43,12 @@ explore(_TestEngine, _NumRuns, _Length) ->
 init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
 init([SUTModule, Scheduler, BootstrapScheduler]) ->
+    {ok, HtmlMod} = gen_server:start_link(html_output, [],[]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
-        sut_module = SUTModule
+        sut_module = SUTModule,
+        html_module = HtmlMod
     }}.
 
 handle_cast(_Msg, State) ->
@@ -58,6 +61,7 @@ handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _F
         fun(RunId, Acc) ->
             [{RunId, explore1(SUTModule, Config, MILInstructions, Length, State)} | Acc] end,
         [], RunIds),
+    lists:foreach(fun({RunId, History}) -> html_output:output_html(State#state.html_module, RunId, History) end, Runs),
     {reply, Runs, State#state{
         runs = Runs ++ State#state.runs,
         next_id = State#state.next_id + NumRuns
@@ -96,12 +100,12 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
         Observers),
 
     % register with MIL (currently acting as client for SUT_instructions)
-    message_interception_layer:register_with_name(MIL, test_engine, self(), test_engine),
+    % message_interception_layer:register_with_name(MIL, test_engine, self(), test_engine),
 
     % bootstrap application w/o scheduler
     SUTModule:bootstrap_wo_scheduler(),
 
-    InitialHistory = [{init, collect_state(MIL)}],
+    InitialHistory = [{#instruction{module=test_engine, function=init, args=[]}, collect_state(MIL)}],
 
     % bootstrap application w/ scheduler if necessary
     History = case SUTModule:needs_bootstrap_w_scheduler() of
@@ -119,15 +123,16 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     Steps = lists:seq(0, Length-1),
 
     % per step: choose instruction, execute and collect result
-    Run = lists:foldl(fun(_Step, History) ->
+    Run = lists:foldl(fun(_Step, Hist) ->
             % ask scheduler for next concrete instruction
-            NextInstr = (State#state.scheduler):choose_instruction(Scheduler, MIL, SUTModule, MILInstructions, History),
+            NextInstr = (State#state.scheduler):choose_instruction(Scheduler, MIL, SUTModule, MILInstructions, Hist),
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
             ok = run_instruction(NextInstr, MIL, State),
-            % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
+            % give program a little time to react
+            timer:sleep(500),
             ProgState = collect_state(MIL),
 
-            [{NextInstr, ProgState} | History] end,
+            [{NextInstr, ProgState} | Hist] end,
         History, Steps),
 
 %%TODO: remove again
@@ -155,10 +160,10 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
         true -> apply(Module, Function, Args);
         false ->
             _Pid = spawn(fun() ->
-                message_interception_layer:register_with_name(MIL,
-                    string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
-                    self(),
-                    run_instr_proc),
+                % message_interception_layer:register_with_name(MIL,
+                %     string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
+                %     self(),
+                %     run_instr_proc),
                 apply(Module, Function, Args)
 %%        TODO send result back
                          end)

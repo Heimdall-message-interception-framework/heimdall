@@ -60,7 +60,7 @@ test_engine(InitialConfig) ->
         ++ InitialConfig),
   ListenTo = lists:map(fun(Id) -> "bc" ++ integer_to_list(Id) ++ "_be" end, lists:seq(0, maps:get(num_processes, Conf)-1)),
   Conf2 = maps:put(listen_to, ListenTo, Conf),
-  Timeout = 20000,
+  Timeout = infinity,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
                              MILInstructions, 100, 5, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
@@ -80,7 +80,7 @@ test_scheduler_bfs(InitialConfig) ->
   ++ InitialConfig),
   ListenTo = lists:map(fun(Id) -> "bc" ++ integer_to_list(Id) ++ "_be" end, lists:seq(0, maps:get(num_processes, Conf)-1)),
   Conf2 = maps:put(listen_to, ListenTo, Conf),
-  Timeout = 20000,
+  Timeout = infinity,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
     MILInstructions, 2, 30, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).
@@ -98,7 +98,7 @@ test_scheduler_pct(InitialConfig) ->
   ++ InitialConfig),
   ListenTo = lists:map(fun(Id) -> "bc" ++ integer_to_list(Id) ++ "_be" end, lists:seq(0, maps:get(num_processes, Conf)-1)),
   Conf2 = maps:put(listen_to, ListenTo, Conf),
-  Timeout = 20000,
+  Timeout = infinity,
   Runs = test_engine:explore(Engine, bc_module, Conf2,
     MILInstructions, 5, 30, Timeout),
   lists:foreach(fun({RunId, History}) -> io:format("Run ~p: ~p", [RunId,History]) end, Runs).

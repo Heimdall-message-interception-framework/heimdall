@@ -142,7 +142,7 @@ start_link() ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  ets:new(pid_name_table, [named_table, {read_concurrency, true}, protected]),
+  % ets:new(pid_name_table, [named_table, {read_concurrency, true}, protected]),
   {ok, #state{}}.
 
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},

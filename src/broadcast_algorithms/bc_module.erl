@@ -70,6 +70,7 @@ handle_call(bootstrap_wo_scheduler, _From, State) ->
     StartBCProcess = fun(Id) ->
         Name = "bc" ++ integer_to_list(Id),
         {ok, Pid} = gen_server:start_link(BCType, [LL, Name, DeliverTo], []),
+        ets:insert(pid_name_table, {Pid, Name++ "_" ++ atom_to_list(BCType)}),
         Pid end,
     BC_Pids = lists:map(StartBCProcess, lists:seq(0, NumProcesses - 1)),
     application:set_env(sched_msg_interception_erlang, bc_pids, BC_Pids),

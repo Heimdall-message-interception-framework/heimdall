@@ -43,6 +43,9 @@ explore(_TestEngine, _NumRuns, _Length) ->
 init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
 init([SUTModule, Scheduler, BootstrapScheduler]) ->
+    %% start pid_name_table
+    ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]),
+    io:format("[~p] ets tables: ~p~n", [?MODULE, ets:all()]),
     {ok, HtmlMod} = gen_server:start_link(html_output, [],[]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,

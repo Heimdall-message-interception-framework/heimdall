@@ -88,6 +88,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
     % start MIL 
     {ok, MIL} = message_interception_layer:start(),
+    ets:insert(pid_name_table, {MIL, "MIL"}),
     erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 

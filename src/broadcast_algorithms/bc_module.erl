@@ -4,7 +4,7 @@
 -include("test_engine_types.hrl").
 
 -export([generate_instruction/2, start/1, start_link/1, get_instructions/0, get_observers/0, generate_instruction/1, bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, needs_bootstrap_w_scheduler/0, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, stop_sut/0, stop_sut/1]).
--export([init/1, handle_call/3, handle_cast/2, terminate/2]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
                  instruction_counter = 0 :: 0 | pos_integer(),
@@ -99,6 +99,8 @@ handle_call(get_instructions, _From, State) ->
 handle_cast(_Req, _State) ->
     {noreply, _State}.
 
+handle_info(_Msg, State) -> 
+    {noreply, State}.
 
 terminate(Reason, _State) ->
     io:format("[BC_Module] Terminating. Reason: ~p~n", [Reason]),

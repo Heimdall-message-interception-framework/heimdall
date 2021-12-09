@@ -4,23 +4,23 @@
 
 -export([init/1, handle_cast/2, handle_info/2, handle_call/3, output_html/3]).
 
--record(state, {}).
+-record(state, {
+    filename_prefix = "" :: string()
+}).
 
+init([FilenamePrefix]) ->
+    {ok,#state{filename_prefix = FilenamePrefix}};
 init([]) ->
     {ok,#state{}}.
 
--spec handle_call(_, _, _) -> none().
-handle_call({output_html, Name, History}, _From, State) ->
-    Html = history_to_html(erlang_to_string(Name), History),
-    write_file(Html, erlang_to_string(Name) ++ ".hmtl"),
-    {reply, ok, State};
 handle_call(Msg, From, State) ->
     erlang:error("[~p] received unhandled call ~p from ~p", [?MODULE, Msg, From]),
     {stop, unhandled_call, State}.
 
 handle_cast({output_html, Name, History}, State) ->
-    Html = history_to_html(erlang_to_string(Name), History),
-    write_file(Html, erlang_to_string(Name) ++ ".hmtl"),
+    Filename = State#state.filename_prefix ++"_" ++ erlang_to_string(Name),
+    Html = history_to_html(Filename, History),
+    write_file(Html, Filename ++ ".hmtl"),
     {noreply, State};
 handle_cast(Msg, State) ->
     erlang:error("[~p] received unhandled cast ~p", [?MODULE, Msg]),
@@ -37,7 +37,7 @@ handle_info(Info, State) ->
 
 -spec output_html(atom() | pid() | {atom(), _} | {'via', _, _}, _, _) -> 'ok'.
 output_html(HtmlMod, Name, History) ->
-    gen_server:call(HtmlMod, {output_html, Name, History}, infinity).
+    gen_server:cast(HtmlMod, {output_html, Name, History}).
 
 %%====================================================================
 %% Internal functions

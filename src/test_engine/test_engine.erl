@@ -13,8 +13,7 @@
     next_id = 0 :: 0 | pos_integer(),
     bootstrap_scheduler = undefined :: atom(),
     scheduler = undefined :: atom(),
-    sut_module :: atom(),
-    html_module :: pid()
+    sut_module :: atom()
 }).
 %%% API functions
 
@@ -46,12 +45,10 @@ init([SUTModule, Scheduler, BootstrapScheduler]) ->
     %% start pid_name_table
     ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]),
     io:format("[~p] ets tables: ~p~n", [?MODULE, ets:all()]),
-    {ok, HtmlMod} = gen_server:start_link(html_output, [],[]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
-        sut_module = SUTModule,
-        html_module = HtmlMod
+        sut_module = SUTModule
     }}.
 
 handle_cast(_Msg, State) ->
@@ -62,9 +59,8 @@ handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _F
     RunIds = lists:seq(State#state.next_id, State#state.next_id+NumRuns-1),
     Runs = lists:foldl(
         fun(RunId, Acc) ->
-            [{RunId, explore1(SUTModule, Config, MILInstructions, Length, State)} | Acc] end,
+            [{RunId, explore1(SUTModule, Config, MILInstructions, Length, State, RunId)} | Acc] end,
         [], RunIds),
-    lists:foreach(fun({RunId, History}) -> html_output:output_html(State#state.html_module, RunId, History) end, Runs),
     {reply, Runs, State#state{
         runs = Runs ++ State#state.runs,
         next_id = State#state.next_id + NumRuns
@@ -83,8 +79,8 @@ terminate(Reason, _State) ->
 
 %%% internal functions
 % perform a single exploration run
--spec explore1(atom(), maps:map(), [#abstract_instruction{}], integer(), #state{}) -> history().
-explore1(SUTModule, Config, MILInstructions, Length, State) ->
+-spec explore1(atom(), maps:map(), [#abstract_instruction{}], integer(), #state{}, integer()) -> history().
+explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
     % start MIL 
     {ok, MIL} = message_interception_layer:start(),
@@ -138,6 +134,11 @@ explore1(SUTModule, Config, MILInstructions, Length, State) ->
 
             [{NextInstr, ProgState} | Hist] end,
         History, Steps),
+    
+    % write html file if html engine is running
+    case maps:get(html_output, Config, undefined) of
+        undefined -> ok;
+        HtmlMod -> html_output:output_html(HtmlMod, RunId, Run) end,
 
 %%TODO: remove again
     % check if our monitors report anything

@@ -104,20 +104,57 @@ step_to_html({Index, {#instruction{module= Module, function=Function, args= Args
     "<div class=\"collapse\" id=\""++ Detailsname ++"\">
                 <div class=\"card card-body details\">
                     <span class=\"state-property\">Instruction</span>
-                    "++ erlang_to_string(#instruction{module= Module, function=Function, args= Args}) ++"
+                    "++ instruction_to_string(#instruction{module= Module, function=Function, args= Args}) ++"
                     <span class=\"state-property\">Properties</span>
                     "++ erlang_to_string(Properties) ++ "
                     <span class=\"state-property\">Commands in Transit</span>
-                    "++ erlang_to_string(lists:reverse(CommandsInTransit)) ++"
+                    "++ cits_to_string(lists:reverse(CommandsInTransit)) ++"
                     <span class=\"state-property\">Nodes</span>
-                    "++ erlang_to_string(Nodes) ++"
+                    "++ nodelist_to_string(Nodes) ++"
                     <span class=\"state-property\">Timeouts</span>
                     "++ erlang_to_string(Timeouts) ++"
                     <span class=\"state-property\">Crashes</span>
-                    "++ erlang_to_string(Crashed) ++"
+                    "++ nodelist_to_string(Crashed) ++"
                 </div>
             </div>
 </li>".
+
+instruction_to_string(#instruction{module= Module, function=Function, args= Args}) -> 
+        "<span class=\"instruction\">"++erlang_to_string(Module) ++ ":" ++ erlang_to_string(Function) ++ args_to_string(Args) ++"</span>".
+
+args_to_string(Args) ->
+    Strings = lists:map(fun(A) -> case is_pid(A) of
+        true -> pid_to_name(A);
+        false -> erlang_to_string(A) end end, Args),
+    "(" ++ string:join(Strings, ", ") ++ ")".
+
+pid_to_name(Pid) ->
+    case ets:lookup(pid_name_table, Pid) of
+        [ ] -> erlang_to_string(Pid);
+        [{_, Name}] ->
+            Out = "<em class=\"pid\" title=\""++ erlang_to_string(Pid)++"\" data-bs-toggle=\"tooltip\" data-bs-placement=\"top\" data-pid=\""++ erlang_to_string(Pid)++"\" data-name=\""++ Name ++ "\">" ++ Name ++"</em>",
+            io_lib:format("~s", [Out]) end.
+
+cits_to_string(CommandsInTransit) ->
+    "<ul>" ++
+    lists:map(fun(C) -> "<li><span class=\"comm-in-trans\">" ++ cit_to_string(C) ++ "</span></li>"end,
+        CommandsInTransit) ++
+    "</ul>".
+
+% {ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}
+cit_to_string({ID, From, To, erlang, send, [_PIDTo, Msg]}) ->
+    "[" ++ erlang_to_string(ID) ++ "] " ++ From ++ " → " ++ To ++ ": " ++ erlang_to_string(Msg);
+cit_to_string(Command) ->
+    erlang_to_string(Command).
+
+nodelist_to_string(Nodes) ->
+    Formatted = lists:map(fun(C) -> "<li>" ++ node_to_string(C) ++ "</li>" end, Nodes),
+    "<ul class=\"nodelist\">" ++ Formatted ++ "</ul>".
+
+node_to_string({_Name, PID}) ->
+    pid_to_name(PID).
+    
+
 
 html_prefix(Title) ->
 "<!doctype html>
@@ -195,6 +232,22 @@ html_prefix(Title) ->
         .prop-invalid {
             color: red;
         }
+
+        em.pid {
+            font-style: inherit;
+            color: blue;
+            cursor: pointer;
+        }
+
+        ul.nodelist {
+            padding-left: 0;
+        }
+        ul.nodelist li{
+            display: inline;
+        }
+        ul.nodelist li:not(:last-child)::after {
+            content: \" · \";
+        }
     </style>
 </head>
 
@@ -205,9 +258,9 @@ html_prefix(Title) ->
     <!-- <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js\" integrity=\"sha384-ka7Sk0Gln4gmtz2MlQnikT1wXgYsOg+OMhuP+IlRH9sENBO0LRn5q+8nbTov4+1p\" crossorigin=\"anonymous\"></script> -->
 
     <!-- Option 2: Separate Popper and Bootstrap JS -->
-    <!--<script src=\"https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js\"
+    <script src=\"https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js\"
         integrity=\"sha384-7+zCNj/IqJ95wo16oMtfsKbZ9ccEh31eOz1HGyDuCQ6wgnyJNSYdrPa03rtR1zdB\"
-        crossorigin=\"anonymous\"></script> -->
+        crossorigin=\"anonymous\"></script>
     <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js\"
         integrity=\"sha384-QJHtvGhmr9XOIpI6YVutG+2QOK9T+ZnN4kzFN1RtK3zEFEIsxhlmWl5/YESvpZ13\"
         crossorigin=\"anonymous\"></script>
@@ -225,6 +278,13 @@ html_postfix() ->
                 parent.classList.toggle('li-collapsed');
             });
         }
+
+        // toggle tooltips
+        var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle=\"tooltip\"]'))
+        var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl)
+        })
+
     </script>
 </body>
 </html>".

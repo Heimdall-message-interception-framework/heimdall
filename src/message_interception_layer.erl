@@ -14,7 +14,7 @@
 -export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 %% API for SUT
--export([register_with_name/4, msg_command/6, enable_timeout/4, disable_timeout/3, enable_timeout/5]).
+-export([register_with_name/4, deregister/3, msg_command/6, enable_timeout/4, disable_timeout/3, enable_timeout/5]).
 %% API for scheduling engine
 -export([no_op/1, exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
 %% Getters
@@ -44,6 +44,9 @@
 %% registration of processes
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
   gen_server:call(MIL, {register, {Name, Identifier, Kind}}).
+%% de-registration of processes
+deregister(MIL, Name, Identifier) ->
+  gen_server:call(MIL, {deregister, {Name, Identifier}}).
 
 %% msg_commands
 msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
@@ -142,7 +145,10 @@ start_link() ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
 init([]) ->
-  % ets:new(pid_name_table, [named_table, {read_concurrency, true}, protected]),
+  case ets:info(pid_name_table) of
+    undefined -> ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]);
+    _ -> ok
+  end,
   {ok, #state{}}.
 
 -spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
@@ -245,6 +251,26 @@ handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
                         registered_pid_nodes = NewRegisteredPidNodes,
                         map_commands_in_transit = NewCommandStore,
                         id_counter = NextId}};
+handle_call({deregister, {NodeName, NodePid}}, _From, State) ->
+  ets:delete(pid_name_table, NodePid),
+  NewRegisteredNodesPid = orddict:erase(NodeName, State#state.registered_nodes_pid),
+  NewRegisteredPidNodes = orddict:erase(NodePid, State#state.registered_pid_nodes),
+%%  TODO: remove from CommandStore
+%%  AllOtherNames = get_all_node_names_from_state(State),
+%%  CmdListNewQueues = [{{Other, NodeName}, queue:new()} || Other <- AllOtherNames] ++
+%%    [{{NodeName, Other}, queue:new()} || Other <- AllOtherNames],
+%%  CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
+%%  Fun = fun({_, _}, _, _) -> undefined end,
+%%  NewCommandStore = orddict:merge(Fun, State#state.map_commands_in_transit, CmdOrddictNewQueues),
+%%  TODO: add sched_event about de-registeration
+%%  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeName},
+%%  NextId = State#state.id_counter + 1,
+%%  msg_interception_helpers:submit_sched_event(SchedEvent),
+  {reply, ok, State#state{registered_nodes_pid = NewRegisteredNodesPid,
+    registered_pid_nodes = NewRegisteredPidNodes
+%%    map_commands_in_transit = NewCommandStore,
+%%    id_counter = NextId
+ }};
 handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State = #state{})
   when not is_tuple(ToPid)->
   From = pid_to_node(State, FromPid),
@@ -396,7 +422,9 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 pid_to_node(State, Pid) ->
   case orddict:find(Pid, State#state.registered_pid_nodes) of
     {ok, Node} -> Node;
-    _ -> erlang:error([pid_not_registered, Pid])
+    _ -> NameInTable = ets:lookup(pid_name_table, Pid),
+      erlang:display(["NameInTable", NameInTable]),
+      erlang:error([pid_not_registered, Pid])
   end.
 
 check_if_crashed(State, To) ->

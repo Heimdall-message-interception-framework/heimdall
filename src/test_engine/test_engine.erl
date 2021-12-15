@@ -165,12 +165,11 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
         true -> apply(Module, Function, Args);
         false ->
             _Pid = spawn(fun() ->
-                % message_interception_layer:register_with_name(MIL,
-                %     string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
-                %     self(),
-                %     run_instr_proc),
-                apply(Module, Function, Args)
+                Name = string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
+                message_interception_layer:register_with_name(MIL, Name, self(), run_instr_proc),
+                apply(Module, Function, Args),
 %%        TODO send result back
+                message_interception_layer:deregister(MIL, Name, self())
                          end)
     end,
     ok.

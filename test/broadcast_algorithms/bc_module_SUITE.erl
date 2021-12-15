@@ -29,7 +29,6 @@ test_module(InitialConfig) ->
     % start ObserverManager and MIL
     {ok, OM} = gen_event:start({global,om}),
     {ok, MIL} = message_interception_layer:start(),
-    ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]),
     erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]

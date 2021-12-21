@@ -19,7 +19,7 @@
 -record(sched_event, {
                   what :: sched_event_type(),
                   id = undefined :: number(),
-                  name = undefined :: atom() | undefined,
+                  name = undefined :: nonempty_string() | undefined,
                   class = undefined :: atom() | undefined,
                   from = undefined :: pid() | atom() | nonempty_string() | undefined,
                   to = undefined :: pid() | atom() | nonempty_string() | undefined,

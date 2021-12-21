@@ -42,6 +42,7 @@
 %% FOR SUT
 
 %% registration of processes
+-spec register_with_name(pid(), nonempty_string(), pid(), _) -> any().
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
   gen_server:call(MIL, {register, {Name, Identifier, Kind}}).
 %% de-registration of processes

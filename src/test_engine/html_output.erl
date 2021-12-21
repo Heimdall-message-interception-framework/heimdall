@@ -14,7 +14,7 @@ init([]) ->
     {ok,#state{}}.
 
 handle_call(Msg, From, State) ->
-    erlang:error("[~p] received unhandled call ~p from ~p", [?MODULE, Msg, From]),
+    io:format("[~p] received unhandled call ~p from ~p", [?MODULE, Msg, From]),
     {stop, unhandled_call, State}.
 
 handle_cast({output_html, Name, History}, State) ->

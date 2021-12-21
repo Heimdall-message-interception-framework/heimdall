@@ -44,7 +44,7 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
     {ok, State#state{
         delivered = NewDeliveredMessages,
         validity_p = maps:put(Proc, NewValidity, State#state.validity_p)}};
-handle_event(Event, State) ->
+handle_event(_Event, State) ->
     % io:format("[no_creation_prop] received unhandled event: ~p~n", [Event]),
     {ok, State}.
 

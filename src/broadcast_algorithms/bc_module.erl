@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
 
--export([generate_instruction/2, start/1, start_link/1, get_instructions/0, get_observers/0, generate_instruction/1, bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, needs_bootstrap_w_scheduler/0, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, stop_sut/0, stop_sut/1]).
+-export([generate_instruction/2, start/1, start_link/1, get_instructions/0, get_observers/0, get_properties/0, generate_instruction/1, bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, needs_bootstrap_w_scheduler/0, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, stop_sut/0, stop_sut/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
@@ -26,6 +26,10 @@ get_instructions() ->
 
 get_observers() ->
     gen_server:call(?MODULE, get_observers).
+
+get_properties() -> [
+    agreement, causal_delivery, no_creation, no_duplications, validity
+].
 
 bootstrap_wo_scheduler() ->
     gen_server:call(?MODULE, bootstrap_wo_scheduler).

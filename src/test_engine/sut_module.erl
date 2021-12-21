@@ -13,4 +13,5 @@
 -callback generate_instruction(AbstrInstruction ::#abstract_instruction{}) -> #instruction{}.
 -callback get_instructions() -> [#abstract_instruction{}].
 -callback get_observers() -> [atom()].
+-callback get_properties() -> [atom()].
 % -callback run_instruction(AbstrInstruction ::#abstract_instruction{}) -> any().

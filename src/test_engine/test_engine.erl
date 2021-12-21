@@ -44,7 +44,6 @@ init([SUTModule, Scheduler]) ->
 init([SUTModule, Scheduler, BootstrapScheduler]) ->
     %% start pid_name_table
     ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]),
-    io:format("[~p] ets tables: ~p~n", [?MODULE, ets:all()]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
@@ -105,7 +104,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     % bootstrap application w/o scheduler
     SUTModule:bootstrap_wo_scheduler(),
 
-    InitialHistory = [{#instruction{module=test_engine, function=init, args=[]}, collect_state(MIL)}],
+    InitialHistory = [{#instruction{module=test_engine, function=init, args=[]}, collect_state(MIL, SUTModule)}],
 
     % bootstrap application w/ scheduler if necessary
     History = case SUTModule:needs_bootstrap_w_scheduler() of
@@ -130,7 +129,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
             ok = run_instruction(NextInstr, MIL, State),
             % give program a little time to react
             timer:sleep(500),
-            ProgState = collect_state(MIL),
+            ProgState = collect_state(MIL, SUTModule),
 
             [{NextInstr, ProgState} | Hist] end,
         History, Steps),
@@ -174,15 +173,21 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
     end,
     ok.
 
--spec collect_state(pid()) -> #prog_state{}.
-collect_state(MIL) ->
+-spec collect_state(pid(), atom()) -> #prog_state{}.
+collect_state(MIL, SUTModule) ->
     Observers = gen_event:which_handlers({global,om}),
-    % collect properties
-    Properties = maps:from_list(lists:flatmap(fun(Obs) -> read_observer(Obs) end, Observers)),
+    io:format("[~p] observers: ~p", [?MODULE, Observers]),
+
+    % filter properties
+    Props = SUTModule:get_properties(),
+    Properties = lists:filter(fun(X) -> lists:member(X, Props) end, Observers),
+
+    % read properties
+    PropValues = maps:from_list(lists:flatmap(fun(P) -> read_property(P) end, Properties)),
 
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
     #prog_state{
-        properties = Properties,
+        properties = PropValues,
         commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
         timeouts = message_interception_layer:get_timeouts(MIL),
         nodes = message_interception_layer:get_all_node_names(MIL),
@@ -190,8 +195,9 @@ collect_state(MIL) ->
         % TODO: support permanent crashes
     }.
 
--spec read_observer(atom()) -> [{nonempty_string(), boolean()}].
-read_observer(Observer) ->
+-spec read_property(atom()) -> [{nonempty_string(), boolean()}].
+read_property(Observer) ->
+    io:format("[~p] reading observer ~p~n", [?MODULE, Observer]),
     Result = gen_event:call({global,om}, Observer, get_result),
     case Result of
         Bool when (Bool =:= true) or (Bool =:= false) -> [{atom_to_list(Observer), Bool}];
@@ -199,7 +205,6 @@ read_observer(Observer) ->
         Map -> lists:map(fun({Key,Val}) -> {atom_to_list(Observer) ++ "_" ++ Key, Val} end,
             maps:to_list(Map))
     end.
-
 
 %% does the bootstrapping with the according scheduler and returns initial part of history
 bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MIL, MILInstructions) ->
@@ -223,7 +228,7 @@ bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SU
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
             ok = run_instruction(NextInstr, MIL, State),
             % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
-            ProgState = collect_state(MIL),
+            ProgState = collect_state(MIL, SUTModule),
             History1 = [{NextInstr, ProgState} | History],
             bootstrap_w_scheduler_loop(ReplyRef, History1, State, BootstrapScheduler, MIL, SUTModule, MILInstructions)
     end.

@@ -279,7 +279,10 @@ build_4th_stage(#log_tree{commit_index_parts = CommIndexParts, children = Childr
                                            undefined -> not_given;
                                            Other ->
                                              OtherRecord = maps:get(Other, PartStateMap),
-                                             OtherRecord#per_part_state.commit_index < PartRecord#per_part_state.commit_index
+                                             OtherRecord#per_part_state.commit_index =< array:size(PartRecord#per_part_state.log)
+                                             % TODO: does size for array work?
+                                             % according to paper, Raft even checks the length of logs, not only prefix with committed
+                                             % but the latter is used in TLA safety specs
                                          end,
                           #per_part_abs_info{
                             role = PartRecord#per_part_state.state,

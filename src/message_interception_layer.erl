@@ -152,14 +152,9 @@ init([]) ->
   end,
   {ok, #state{}}.
 
--spec(handle_call(Request :: term(), From :: {pid(), Tag :: term()},
-    State :: #state{}) ->
-  {reply, Reply :: term(), NewState :: #state{}} |
-  {reply, Reply :: term(), NewState :: #state{}, timeout() | hibernate} |
-  {noreply, NewState :: #state{}} |
-  {noreply, NewState :: #state{}, timeout() | hibernate} |
-  {stop, Reason :: term(), Reply :: term(), NewState :: #state{}} |
-  {stop, Reason :: term(), NewState :: #state{}}).
+-spec handle_call
+  % registering
+  ({register, {nonempty_string(), atom(), any()}}, {pid(),_}, #state{}) -> {reply, ok, #state{}}.
 %%
 handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, MsgContent}]}}, _From,
     State = #state{})
@@ -237,11 +232,12 @@ handle_call({get_timeouts}, _From, State = #state{}) ->
 %%
 handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
   ets:insert(pid_name_table, {NodePid, NodeName}),
-  NewRegisteredNodesPid = orddict:store(NodeName, NodePid, State#state.registered_nodes_pid),
-  NewRegisteredPidNodes = orddict:store(NodePid, NodeName, State#state.registered_pid_nodes),
+  NameAsAtom = list_to_atom(NodeName),
+  NewRegisteredNodesPid = orddict:store(NameAsAtom, NodePid, State#state.registered_nodes_pid),
+  NewRegisteredPidNodes = orddict:store(NodePid, NameAsAtom, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names_from_state(State),
-  CmdListNewQueues = [{{Other, NodeName}, queue:new()} || Other <- AllOtherNames] ++
-                  [{{NodeName, Other}, queue:new()} || Other <- AllOtherNames],
+  CmdListNewQueues = [{{Other, NameAsAtom}, queue:new()} || Other <- AllOtherNames] ++
+                  [{{NameAsAtom, Other}, queue:new()} || Other <- AllOtherNames],
   CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.map_commands_in_transit, CmdOrddictNewQueues),

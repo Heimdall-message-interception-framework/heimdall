@@ -109,5 +109,5 @@ handle_info(_Msg, State) ->
     {noreply, State}.
 
 terminate(Reason, _State) ->
-    io:format("[BC_Module] Terminating. Reason: ~p~n", [Reason]),
+    io:format("[~p] Terminating. Reason: ~p~n", [?MODULE, Reason]),
     ok.

@@ -57,8 +57,12 @@ history_to_html(Name, History) ->
     Steps = lists:reverse(lists:seq(0, length(History) -1)),
     HistoryWithSteps = lists:reverse(lists:zip(Steps, History)),
     StepsAsHTML = lists:map(fun(S) -> step_to_html(S) end, HistoryWithSteps),
+    AbstractStates = lists:foldl(fun({_Inst, State}, Acc) ->
+        sets:add_element(State#prog_state.abstract_state, Acc) end, sets:new(), History),
+    NumAbstractStates = sets:size(AbstractStates),
     html_prefix(Name) ++ 
     "
+    <p>Number of abstract states: " ++ erlang_to_string(NumAbstractStates) ++ "</pe
     <ul class=\"list-group\">
         <li class=\"list-group-item\">
             <div class=\"header row\">
@@ -143,7 +147,7 @@ cits_to_string(CommandsInTransit) ->
 
 % {ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}
 cit_to_string({ID, From, To, erlang, send, [_PIDTo, Msg]}) ->
-    "[" ++ erlang_to_string(ID) ++ "] " ++ From ++ " → " ++ To ++ ": " ++ erlang_to_string(Msg);
+    "[" ++ erlang_to_string(ID) ++ "] " ++ erlang_to_string(From) ++ " → " ++ erlang_to_string(To) ++ ": " ++ erlang_to_string(Msg);
 cit_to_string(Command) ->
     erlang_to_string(Command).
 

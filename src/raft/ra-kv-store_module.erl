@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
 
--export([bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, get_instructions/0, get_observers/0, get_properties/0, generate_instruction/1, generate_instruction/2, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, needs_bootstrap_w_scheduler/0, stop_sut/0, stop_sut/1]).
+-export([bootstrap_wo_scheduler/0, bootstrap_wo_scheduler/1, get_instructions/0, get_observers/0, get_properties/0, generate_instruction/1, generate_instruction/2, bootstrap_w_scheduler/1, bootstrap_w_scheduler/2, needs_bootstrap_w_scheduler/0, stop_sut/0, stop_sut/1, abstract_state_mod/0]).
 -export([start/1, start_link/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
 
 -record(state, {num_processes = 3 :: pos_integer(),
@@ -43,6 +43,8 @@ get_properties() -> [
     raft_log_matching,
     raft_state_machine_safety
 ].
+
+abstract_state_mod() -> raft_abstract_state_predicate.
 
 bootstrap_wo_scheduler() ->
     gen_server:call(?MODULE, bootstrap_wo_scheduler).

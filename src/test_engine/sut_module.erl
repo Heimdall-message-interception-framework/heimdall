@@ -14,4 +14,5 @@
 -callback get_instructions() -> [#abstract_instruction{}].
 -callback get_observers() -> [atom()].
 -callback get_properties() -> [atom()].
+-callback abstract_state_mod() -> undefined | atom().
 % -callback run_instruction(AbstrInstruction ::#abstract_instruction{}) -> any().

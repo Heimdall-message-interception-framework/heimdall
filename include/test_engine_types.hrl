@@ -13,8 +13,9 @@
     properties = maps:new() :: #{nonempty_string() => boolean()},
     commands_in_transit = [] :: [any()], % should have command type
     timeouts = [] :: [any()], % timeout, see MIL
-    nodes = [] :: [any()], % process_identifier
-    crashed = [] :: [any()] % process_identifier
+    nodes = [] :: [pid()], % process_identifier
+    crashed = [] :: [pid()], % process_identifier
+    abstract_state = undefined :: undefined | any() % datastructure to hold abstract state
 }).
 
 -type history() :: [{#instruction{}, #prog_state{}}].

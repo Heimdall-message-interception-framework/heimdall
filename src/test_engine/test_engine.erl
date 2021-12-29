@@ -3,7 +3,7 @@
 -include("test_engine_types.hrl").
 -include("observer_events.hrl").
 
--export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, explore/3, explore/6, explore/7]).
+-export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, explore/6, explore/7]).
 
 % a run consists of an id and a history
 -type run() :: {pos_integer() | 0, history()}.
@@ -35,10 +35,9 @@ explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length) ->
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout) ->
     gen_server:call(TestEngine,
         {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, Timeout).
-explore(_TestEngine, _NumRuns, _Length) ->
-    undefined.
 
 %% gen_server callbacks
+-spec init([atom(), ...]) -> {'ok', #state{}}.
 init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
 init([SUTModule, Scheduler, BootstrapScheduler]) ->
@@ -53,7 +52,7 @@ init([SUTModule, Scheduler, BootstrapScheduler]) ->
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
--spec handle_call({explore, _}, _, #state{}) -> {'reply', [{pos_integer(), history()}], #state{}}.
+-spec handle_call({explore, {atom(), #{}, [atom()], 0 | pos_integer(), 0 | pos_integer()}}, _, #state{}) -> {'reply', [{pos_integer(), history()}], #state{}}.
 handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _From, State) ->
     RunIds = lists:seq(State#state.next_id, State#state.next_id+NumRuns-1),
     Runs = lists:foldl(
@@ -98,9 +97,6 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     lists:foreach(fun(Obs) -> gen_event:add_sup_handler({global, om}, Obs, [Config]) end,
         Observers),
 
-    % register with MIL (currently acting as client for SUT_instructions)
-    % message_interception_layer:register_with_name(MIL, test_engine, self(), test_engine),
-
     % bootstrap application w/o scheduler
     SUTModule:bootstrap_wo_scheduler(),
 
@@ -139,14 +135,6 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
         undefined -> ok;
         HtmlMod -> html_output:output_html(HtmlMod, RunId, Run) end,
 
-%%TODO: remove again
-    % check if our monitors report anything
-    receive Msg ->
-        io:format("Received from Monitors: ~p~n", [Msg])
-    after 0 ->
-        ok
-    end,
-
     ok = SUTModule:stop_sut(),
     gen_server:stop(SUTModRef),
 
@@ -159,7 +147,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
 
 -spec run_instruction(#instruction{}, pid(), #state{}) -> ok.
 run_instruction(#instruction{module = Module, function = Function, args = Args}, MIL, _State) ->
-%%    only spawn new processes for instructions which not executed by MIL
+%%    only spawn new processes for instructions which are not executed by MIL
     case Module == message_interception_layer of
         true -> apply(Module, Function, Args);
         false ->
@@ -178,12 +166,15 @@ collect_state(MIL, SUTModule) ->
     Observers = gen_event:which_handlers({global,om}),
     io:format("[~p] observers: ~p", [?MODULE, Observers]),
 
-    % filter properties
+    % collect properties
     Props = SUTModule:get_properties(),
     Properties = lists:filter(fun(X) -> lists:member(X, Props) end, Observers),
-
-    % read properties
     PropValues = maps:from_list(lists:flatmap(fun(P) -> read_property(P) end, Properties)),
+
+    % collect abstract state 
+    AbstractState = case SUTModule:abstract_state_mod() of
+        undefined -> undefined;
+        AbstractStateModule -> gen_event:call({global,om}, AbstractStateModule, get_result) end,
 
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
     #prog_state{
@@ -191,22 +182,23 @@ collect_state(MIL, SUTModule) ->
         commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
         timeouts = message_interception_layer:get_timeouts(MIL),
         nodes = message_interception_layer:get_all_node_names(MIL),
-        crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL))
+        crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL)),
         % TODO: support permanent crashes
+        abstract_state = AbstractState
     }.
 
 -spec read_property(atom()) -> [{nonempty_string(), boolean()}].
 read_property(Observer) ->
-    io:format("[~p] reading observer ~p~n", [?MODULE, Observer]),
     Result = gen_event:call({global,om}, Observer, get_result),
+    % check if property is a simple boolean or rather a map of sub_property -> boolean
     case Result of
         Bool when (Bool =:= true) or (Bool =:= false) -> [{atom_to_list(Observer), Bool}];
-%%        @JH: minor but is there any reason not to use maps:map?
         Map -> lists:map(fun({Key,Val}) -> {atom_to_list(Observer) ++ "_" ++ Key, Val} end,
             maps:to_list(Map))
     end.
 
 %% does the bootstrapping with the according scheduler and returns initial part of history
+-spec bootstrap_w_scheduler(#state{}, atom(), atom(), history(), pid(), [atom()]) -> history().
 bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MIL, MILInstructions) ->
 %%    idea:
 %% - let SUTModule start the bootstrapping part which is needs instructions to be scheduled
@@ -216,6 +208,7 @@ bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MIL, MILIns
     % per step: choose instruction, execute and collect result
     bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions).
 
+-spec bootstrap_w_scheduler_loop(_, history(), #state{}, atom(), pid(), atom(), [atom()]) -> history().
 bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions) ->
     receive
         {ReplyRef, _Result} ->

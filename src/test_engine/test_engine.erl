@@ -130,10 +130,15 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
             [{NextInstr, ProgState} | Hist] end,
         History, Steps),
     
-    % write html file if html engine is running
-    case maps:get(html_output, Config, undefined) of
-        undefined -> ok;
-        HtmlMod -> html_output:output_html(HtmlMod, RunId, Run) end,
+    % write html file if html output is requested
+    case maps:get(html_output, Config, false) of
+        false -> ok;
+        true ->
+            case maps:get(test_name, Config, undefined) of
+                undefined -> erlang:throw("Test name undefined but HTML output requested.");
+                TestName -> html_output:output_html(io_lib:format("~p_~p", [TestName, RunId]), Run)
+            end
+    end,
 
     ok = SUTModule:stop_sut(),
     gen_server:stop(SUTModRef),
@@ -164,7 +169,6 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
 -spec collect_state(pid(), atom()) -> #prog_state{}.
 collect_state(MIL, SUTModule) ->
     Observers = gen_event:which_handlers({global,om}),
-    io:format("[~p] observers: ~p", [?MODULE, Observers]),
 
     % collect properties
     Props = SUTModule:get_properties(),

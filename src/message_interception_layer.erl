@@ -233,13 +233,15 @@ handle_call({get_timeouts}, _From, State = #state{}) ->
 %   {stop, Reason :: term(), NewState :: #state{}}).
 %%
 handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
-  ets:insert(pid_name_table, {NodePid, NodeName}),
-  NameAsAtom = list_to_atom(NodeName),
-  NewRegisteredNodesPid = orddict:store(NameAsAtom, NodePid, State#state.registered_nodes_pid),
-  NewRegisteredPidNodes = orddict:store(NodePid, NameAsAtom, State#state.registered_pid_nodes),
+  {NodeNameAtom, NodeNameString} = case is_atom(NodeName) of
+    true -> {NodeName, atom_to_list(NodeName)};
+    false -> {list_to_atom(NodeName), NodeName} end,
+  ets:insert(pid_name_table, {NodePid, NodeNameString}),
+  NewRegisteredNodesPid = orddict:store(NodeNameAtom, NodePid, State#state.registered_nodes_pid),
+  NewRegisteredPidNodes = orddict:store(NodePid, NodeNameAtom, State#state.registered_pid_nodes),
   AllOtherNames = get_all_node_names_from_state(State),
-  CmdListNewQueues = [{{Other, NameAsAtom}, queue:new()} || Other <- AllOtherNames] ++
-                  [{{NameAsAtom, Other}, queue:new()} || Other <- AllOtherNames],
+  CmdListNewQueues = [{{Other, NodeNameAtom}, queue:new()} || Other <- AllOtherNames] ++
+                  [{{NodeNameAtom, Other}, queue:new()} || Other <- AllOtherNames],
   CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.map_commands_in_transit, CmdOrddictNewQueues),

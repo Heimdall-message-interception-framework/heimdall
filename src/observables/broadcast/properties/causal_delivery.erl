@@ -73,7 +73,7 @@ init([Config]) ->
     }}.
 
 % handles delivered messages
--spec handle_event(_, #state{}) -> {'ok', #state{}}.
+-spec handle_event({sched, #sched_event{}}, #state{}) -> {'ok', #state{}}.
 handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadcast_event, event_content = #bc_broadcast_event{message = Msg}}}, State) ->
     HandleMessage = sets:is_element(Proc, State#state.listen_to),
     % only handle message if we listen to this process
@@ -113,8 +113,15 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
 handle_event({sched, #sched_event{what = exec_msg_cmd, from = From, to = To}}, State) ->
     % normalize names
     {_, Suffix} = proc_base_names(sets:to_list(State#state.listen_to)),
-    FromStr = From ++ "_" ++ Suffix,
-    ToStr = To ++ "_" ++ Suffix,
+    % format to string if not already string
+    From2 = case is_atom(From) of
+        true -> atom_to_list(From);
+        false -> From end,
+    To2 = case is_atom(To) of
+        true -> atom_to_list(To);
+        false -> To end,
+    FromStr = From2 ++ "_" ++ Suffix,
+    ToStr = To2 ++ "_" ++ Suffix,
     % check if the name corresponds to the bc processes that we are listening to
     case sets:is_element(FromStr, State#state.listen_to) or 
             sets:is_element(To, State#state.listen_to) of

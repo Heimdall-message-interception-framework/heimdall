@@ -77,9 +77,7 @@ handle_call(get_result, #state{} = State) ->
     Stage3 = build_3rd_stage(Stage2),  % collapse entries
     Stage4 = build_4th_stage(Stage3, State),
     Stage5 = build_5th_stage(Stage4),
-%%    dummy map as result for now -> TODO: add function to get abstract_state
-    DummyResult = maps:from_list([{abstract_state, Stage5}]),
-    {ok, DummyResult, State};
+    {ok, Stage5, State};
 handle_call(get_length_history, #state{history_of_events = HistoryOfEvents} = State) ->
     {ok, queue:len(HistoryOfEvents), State};
 handle_call(Msg, State) ->

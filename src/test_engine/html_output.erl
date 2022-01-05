@@ -39,7 +39,7 @@ history_to_html(Name, History) ->
     NumAbstractStates = sets:size(AbstractStates),
     html_prefix(Name) ++ 
     "
-    <p>Number of abstract states: " ++ erlang_to_string(NumAbstractStates) ++ "</pe
+    <p>Number of abstract states: <span id=\"abstract-state-num\">" ++ erlang_to_string(NumAbstractStates) ++ "</span></pe
     <ul class=\"list-group\">
         <li class=\"list-group-item\">
             <div class=\"header row\">
@@ -59,7 +59,7 @@ history_to_html(Name, History) ->
 -spec step_to_html({integer(), {#instruction{}, #prog_state{}}}) -> nonempty_string().
 step_to_html({Index, {#instruction{module= Module, function=Function, args= Args}, #prog_state{properties = Properties,
     commands_in_transit = CommandsInTransit,
-    timeouts = Timeouts, nodes = Nodes, crashed = Crashed}}}) ->
+    timeouts = Timeouts, nodes = Nodes, crashed = Crashed, abstract_state = AbstractState}}}) ->
         % format command name
         CommandName = io_lib:format("~p: ~p", [Module, Function]),
         % format properties
@@ -96,6 +96,8 @@ step_to_html({Index, {#instruction{module= Module, function=Function, args= Args
                     "++ erlang_to_string(Timeouts) ++"
                     <span class=\"state-property\">Crashes</span>
                     "++ nodelist_to_string(Crashed) ++"
+                    <span class=\"state-property\">Abstract State</span>
+                    "++ erlang_to_string(AbstractState) ++"
                 </div>
             </div>
 </li>".

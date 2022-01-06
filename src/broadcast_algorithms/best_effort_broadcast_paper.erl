@@ -16,12 +16,12 @@
 	self		:: nonempty_string() % name of local process
 }).
 
--spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
+-spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_message()) -> any().
+-spec broadcast(broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
 	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).

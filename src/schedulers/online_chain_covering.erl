@@ -28,11 +28,11 @@
   last_predecessors = sets:new() :: sets:set(any()),
   did_use_one_since_adding = true :: boolean(),
   % when we add events w/o get_first in between, a non-sched event was fired and we waive the last predecessors
-  chain_map = maps:new() :: maps:map(integer(),
-                                    maps:map(integer(), queue:queue({any(), sets:set(any())}))),
+  chain_map = maps:new() :: #{integer() =>
+                                    #{integer() => queue:queue({any(), sets:set(any())})}},
                                     % store cmd ids and predecessors
   command_ids_in_chains = sets:new() :: sets:set(any()),
-  last_events = maps:new() :: maps:map(integer())
+  last_events = maps:new() :: #{integer() => any()}
 }).
 
 %%%===================================================================

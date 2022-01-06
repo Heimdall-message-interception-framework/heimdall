@@ -16,8 +16,8 @@
     armed = true :: boolean(),
     update_target = undefined :: any(),
     history_of_events = queue:new() :: queue:queue(),
-    process_to_idx_map = maps:new() :: maps:maps(),
-    process_considers_itself_leader_map = maps:new() :: maps:maps()
+    process_to_idx_map = maps:new() :: #{},
+    process_considers_itself_leader_map = maps:new() :: #{}
 %%    TO ADD: add more fields
     }).
 

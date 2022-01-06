@@ -11,9 +11,9 @@
     armed = true :: boolean(),
     update_target = undefined :: any(),
     history_of_events = queue:new() :: queue:queue(),
-    term_to_leader_map = maps:new() :: maps:maps(),
-    process_to_term_map = maps:new() :: maps:maps(),
-    process_to_leader_map = maps:new() :: maps:maps()
+    term_to_leader_map = maps:new() :: #{},
+    process_to_term_map = maps:new() :: #{},
+    process_to_leader_map = maps:new() :: #{}
 %%    TO ADD: add more fields
     }).
 

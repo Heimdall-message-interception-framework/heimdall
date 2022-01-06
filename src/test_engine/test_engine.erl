@@ -77,7 +77,7 @@ terminate(Reason, _State) ->
 
 %%% internal functions
 % perform a single exploration run
--spec explore1(atom(), maps:map(), [#abstract_instruction{}], integer(), #state{}, integer()) -> history().
+-spec explore1(atom(), #{atom() => any()}, [#abstract_instruction{}], integer(), #state{}, integer()) -> history().
 explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
     % start MIL 

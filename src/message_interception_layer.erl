@@ -245,7 +245,7 @@ handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
   CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.map_commands_in_transit, CmdOrddictNewQueues),
-  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeName, class = NodeClass},
+  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeNameAtom, class = NodeClass},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
   {reply, ok, State#state{registered_nodes_pid = NewRegisteredNodesPid,

@@ -19,8 +19,8 @@
 -record(state, {
     online_chain_covering :: pid(),
     events_added = 0 :: integer(),
-    d_tuple :: lists:list(non_neg_integer()),
-    chain_key_prios :: lists:list(integer() | atom()), % list from low to high priority
+    d_tuple :: [non_neg_integer()],
+    chain_key_prios :: [integer() | atom()], % list from low to high priority
 %%    chain_key_prios = maps:new() :: maps:maps(any()), % map from priority to chainkey
     next_prio :: integer()
 }).

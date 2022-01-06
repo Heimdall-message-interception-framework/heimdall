@@ -5,7 +5,7 @@
 
 -include("observer_events.hrl").
 -include("sched_event.hrl").
--include("src/broadcast_algorithms/bc_types.hrl").
+-include("bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 
@@ -45,7 +45,7 @@ check_causal_delivery(Msg, Proc, State) ->
 
 % sets the vectorclock of a message
 % only updates the VC of the message if it does not have a VC yet
--spec put_message(_, process_identifier(), #{bc_message() => vectorclock: vectorclock()}) -> #{bc_message() => vectorclock: vectorclock()}.
+-spec put_message(_, vectorclock:vectorclock(), #{bc_message() => vectorclock: vectorclock()}) -> #{bc_message() => vectorclock: vectorclock()}.
 put_message(Msg, SenderVC, MsgVCs) ->
     case maps:is_key(Msg, MsgVCs) of
         false -> maps:put(Msg, SenderVC, MsgVCs);
@@ -81,7 +81,7 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_broadc
         % io:format("[~p] Received broadcast event: ~p, ~p", [?MODULE, Proc,Msg]),
         % calculate vectorclock of process
         OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
-        NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
+        NewVC = vectorclock:set(Proc, vectorclock:get(Proc, OldVC) + 1, OldVC),
         MsgVCs = put_message(Msg, NewVC, State#state.vc_m),
         % io:format("[~p] PVCs: ~p, MVCs: ~p~n", [?MODULE, maps:put(Proc, NewVC, State#state.vc_p), MsgVCs]),
 
@@ -99,7 +99,7 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
         NewDeliveredMessages = sets:add_element(Msg, maps:get(Proc, State#state.delivered_p, sets:new())),
         % update vectorclock of process
         OldVC = maps:get(Proc, State#state.vc_p, vectorclock:new()),
-        NewVC = vectorclock:update_with(Proc, fun(I) -> I+1 end, 0, OldVC),
+        NewVC = vectorclock:set(Proc, vectorclock:get(Proc, OldVC) + 1, OldVC),
         MsgVCs = put_message(Msg, NewVC, State#state.vc_m),
         % io:format("[~p] PVCs: ~p, MVCs: ~p~n", [?MODULE, maps:put(Proc, NewVC, State#state.vc_p), MsgVCs]),
 
@@ -128,12 +128,11 @@ handle_event({sched, #sched_event{what = exec_msg_cmd, from = From, to = To}}, S
         true -> 
             % io:format("[~p] Received msg_event, from: ~p, to: ~p",
             %     [?MODULE, From, To]),
-            % To receives a message from From -> update From's vectorclock
+            % To receives a message from From -> update To's vectorclock
             SenderVC = maps:get(FromStr, State#state.vc_p, vectorclock:new()),
             ReceiverVC = maps:get(ToStr, State#state.vc_p, vectorclock:new()),
-            NewVC = vectorclock:update_with(ToStr, fun(X) -> X+1 end, 0,
-                vectorclock:max([SenderVC, ReceiverVC])),
-
+            Combined = vectorclock:max([SenderVC, ReceiverVC]),
+            NewVC = vectorclock:set(ToStr, vectorclock:get(ToStr, Combined) + 1, Combined),
             % io:format("[~p] SenderVC: ~p, ReceiverVC: ~p, NewReceiver: ~p", [?MODULE,SenderVC,ReceiverVC, NewVC]),
 
             {ok, State#state{

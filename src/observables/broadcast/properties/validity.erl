@@ -2,12 +2,13 @@
 -behaviour(gen_event).
 
 -include("observer_events.hrl").
+-include("bc_types.hrl").
 
 -export([init/1, handle_call/2, handle_event/2, teminate/2]).
 
 -record(state, {
-    broadcast_p = maps:new() :: #{nonempty_string() => sets:set(bc_types:message())}, % broadcast events per process
-    delivered_p = maps:new() :: #{nonempty_string() => sets:set(bc_types:message())}, % delivered events per process
+    broadcast_p = maps:new() :: #{nonempty_string() => sets:set(bc_message())}, % broadcast events per process
+    delivered_p = maps:new() :: #{nonempty_string() => sets:set(bc_message())}, % delivered events per process
     validity_p = maps: new() :: #{nonempty_string() => boolean()} % keeps track of valid processes
 }).
 

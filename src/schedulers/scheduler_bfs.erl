@@ -16,8 +16,8 @@
 
 -record(state, {
     queue_commands = queue:new() :: queue:queue(),
-   	d_tuple :: lists:lists(non_neg_integer()),
-   	delayed_commands = [] :: lists:lists(any()), % store pairs of {index, command}
+   	d_tuple :: [non_neg_integer()],
+   	delayed_commands = [] :: [any()], % store pairs of {index, command}
   	num_seen_deviation_points = 0 :: integer()
 }).
 

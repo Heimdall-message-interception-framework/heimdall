@@ -20,6 +20,10 @@
 %% Getters
 -export([get_commands_in_transit/1, get_timeouts/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1, get_name_for_pid/1]).
 
+-type timerref() :: reference() | false.
+-type mil_timeout() :: any().
+-type command() :: any().
+
 -record(state, {
   registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
   registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
@@ -42,14 +46,16 @@
 %% FOR SUT
 
 %% registration of processes
--spec register_with_name(pid(), nonempty_string(), pid(), _) -> any().
+-spec register_with_name(pid(), nonempty_string(), pid(), _) -> ok.
 register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
   gen_server:call(MIL, {register, {Name, Identifier, Kind}}).
 %% de-registration of processes
+-spec deregister(pid(), nonempty_string(), pid()) -> any().
 deregister(MIL, Name, Identifier) ->
   gen_server:call(MIL, {deregister, {Name, Identifier}}).
 
 %% msg_commands
+-spec msg_command(pid(), pid(), gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
 msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
 %%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
   msg_command(MIL, From, To, Module, Fun, Args);
@@ -57,15 +63,18 @@ msg_command(MIL, From, To, Module, Fun, Args) ->
   gen_server:call(MIL, {msg_cmd, {From, To, Module, Fun, Args}}).
 
 %% timeouts
+-spec enable_timeout(pid(), _, pid(), _) -> timerref().
 enable_timeout(MIL, Time, Dest, Msg) ->
   enable_timeout(MIL, Time, Dest, Msg, undefined).
 %%
+-spec enable_timeout(pid(), _, pid(), _, _) -> timerref().
 enable_timeout(MIL, Time, Dest, Msg, _Options) ->
 %%  we assume that processes do only send timeouts to themselves and ignore Options
   TimerRef = gen_server:call(MIL, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
 %%  erlang:display(["enable_to", TimerRef]),
   TimerRef.
 %%
+-spec disable_timeout(pid(), pid(), timerref()) -> timerref().
 disable_timeout(MIL, Proc, TimerRef) ->
 %%  TODO: currently, we do not really check if the timeout to disable is actually enabled,
 %% need to rearrange calls to API for this and ensure that disable is closer to enable and iff not fired
@@ -75,33 +84,43 @@ disable_timeout(MIL, Proc, TimerRef) ->
 
 %% FOR SCHEDULING ENGINE
 %%
+-spec no_op(_) -> 'ok'.
 no_op(_MIL) ->
   ok.
 %% deprecated, use the one with 4 parameters
+-spec exec_msg_command(pid(), number(), pid(), pid(), _, _, _) -> ok.
 exec_msg_command(MIL, ID, From, To, _Module, _Fun, _Args) ->
   exec_msg_command(MIL, ID, From, To).
 %%
+-spec exec_msg_command(pid(), number(), pid(), pid()) -> ok.
 exec_msg_command(MIL, ID, From, To) ->
   gen_server:call(MIL, {exec_msg_cmd, {ID, From, To}}).
 %%
+-spec duplicate_msg_command(pid(), number(), pid(), pid()) -> ok.
 duplicate_msg_command(MIL, ID, From, To) ->
   gen_server:call(MIL, {duplicate, {ID, From, To}}).
 %%
+-spec alter_msg_command(pid(), number(), pid(), pid(), [any()]) -> ok.
 alter_msg_command(MIL, Id, From, To, NewArgs) ->
   gen_server:call(MIL, {send_altered, {Id, From, To, NewArgs}}).
 %%
+-spec drop_msg_command(pid(), number(), pid(), pid()) -> ok.
 drop_msg_command(MIL, Id, From, To) ->
   gen_server:call(MIL, {drop, {Id, From, To}}).
 %%
+-spec fire_timeout(pid(), atom(), timerref()) -> any().
 fire_timeout(MIL, Proc, TimerRef) ->
   gen_server:call(MIL, {fire_to, {Proc, TimerRef}}).
 %%
+-spec transient_crash(pid(), pid()) -> 'ok'.
 transient_crash(MIL, Name) ->
   ok = gen_server:call(MIL, {crash_trans, {Name}}).
 %%
+-spec permanent_crash(pid(), atom()) -> ok.
 permanent_crash(MIL, Name) ->
   gen_server:call(MIL, {crash_perm, {Name}}).
 %%
+-spec rejoin(pid(), atom()) -> ok.
 rejoin(MIL, Name) ->
   gen_server:call(MIL, {rejoin, {Name}}).
 
@@ -115,17 +134,20 @@ get_commands_in_transit(MIL) ->
 get_timeouts(MIL) ->
   gen_server:call(MIL, {get_timeouts}).
 %%
+-spec get_all_node_names(_) -> [{atom(), pid()}].
 get_all_node_names(MIL) ->
   gen_server:call(MIL, {get_all_node_names}).
 %%
+-spec get_name_for_pid(pid()) -> nonempty_string().
 get_name_for_pid(Pid) ->
   [{_, Name}] = ets:lookup(pid_name_table, Pid),
   Name.
 %%
--spec get_transient_crashed_nodes(pid()) -> sets:set().
+-spec get_transient_crashed_nodes(pid()) -> sets:set(atom()).
 get_transient_crashed_nodes(MIL) ->
   gen_server:call(MIL, {get_transient_crashed_nodes}).
 %%
+-spec get_permanent_crashed_nodes(reference()) -> sets:set(atom()).
 get_permanent_crashed_nodes(MIL) ->
   gen_server:call(MIL, {get_permanent_crashed_nodes}).
 
@@ -139,6 +161,7 @@ get_permanent_crashed_nodes(MIL) ->
 start() ->
   gen_server:start({global,mil}, ?MODULE, [], []).
 
+-spec start_link() -> 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
 start_link() ->
   gen_server:start_link(?MODULE, [], []).
 
@@ -153,7 +176,7 @@ init([]) ->
   {ok, #state{}}.
 
 -spec handle_call
-  ({register, {NodeName::nonempty_string(), NodePid::atom(), _}}, {pid(),_}, #state{}) -> {reply, ok, #state{}};
+  ({register, {NodeName::nonempty_string(), NodePid::pid(), _}}, {pid(),_}, #state{}) -> {reply, ok, #state{}};
   ({get_commands}, {pid(), _}, #state{}) -> {reply, [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}], #state{}}.
 %%
 handle_call({get_commands}, _From, State = #state{}) ->
@@ -393,6 +416,7 @@ handle_call(_Request, _From, State) ->
   erlang:throw(["unhandled call", _Request]),
   {reply, ok, State}.
 %%
+-spec handle_cast(_, #state{}) -> {'noreply', #state{}}.
 handle_cast(Msg, State) ->
   io:format("[cb] received unhandled cast: ~p~n", [Msg]),
   {noreply, State}.
@@ -405,10 +429,12 @@ handle_cast(Msg, State) ->
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.
 
+-spec terminate(_, #state{}) -> 'ok'.
 terminate(Reason, _State = #state{}) ->
   io:format("[MIL] Terminating. Reason: ~p~n", [Reason]),
   ok.
 
+-spec code_change(_, #state{}, _) -> {'ok', #state{}}.
 code_change(_OldVsn, State = #state{}, _Extra) ->
   {ok, State}.
 
@@ -420,6 +446,7 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%  {ok, Pid} = orddict:find(Node, State#state.registered_nodes_pid),
 %%  Pid.
 
+-spec pid_to_node(#state{}, pid()) -> nonempty_string().
 pid_to_node(State, Pid) ->
   case orddict:find(Pid, State#state.registered_pid_nodes) of
     {ok, Node} -> Node;
@@ -428,24 +455,30 @@ pid_to_node(State, Pid) ->
       erlang:error([pid_not_registered, Pid])
   end.
 
+-spec check_if_crashed(#state{}, pid()) -> boolean().
 check_if_crashed(State, To) ->
   sets:is_element(To, State#state.transient_crashed_nodes) or sets:is_element(To, State#state.permanent_crashed_nodes).
 
+-spec get_all_node_names_from_state(#state{}) -> [pid()].
 get_all_node_names_from_state(State) ->
   orddict:fetch_keys(State#state.registered_nodes_pid).
 
+-spec find_cmd_and_get_updated_commands_in_transit(#state{}, atom(), pid(), pid()) -> {atom(), atom(), [any()], [command()], [command()]}.
 find_cmd_and_get_updated_commands_in_transit(State, Id, From, To) ->
   QueueToSearch = orddict:fetch({From, To}, State#state.map_commands_in_transit),
   {Mod, Func, Args, Skipped, UpdatedQueue} = find_cmd_id_in_queue(QueueToSearch, Id),
   NewCommandStore = orddict:store({From, To}, UpdatedQueue, State#state.map_commands_in_transit),
   {Mod, Func, Args, Skipped, NewCommandStore}.
 
+-spec do_exec_cmd(atom() | tuple(), atom(), [any()]) -> any().
 do_exec_cmd(Mod, Func, Args) ->
   erlang:apply(Mod, Func, Args).
 
+-spec find_cmd_id_in_queue(queue:queue(_), atom()) -> {_, _, _, [command()], queue:queue(_)}.
 find_cmd_id_in_queue(QueueToSearch, Id) ->
   find_cmd_id_in_queue([], QueueToSearch, Id).
 
+-spec find_cmd_id_in_queue([command()], queue:queue(_), atom()) -> {atom(), atom(), [any()], [command()], queue:queue(_)}.
 find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
   % io:format("[~p] trying to find cmd_id ~p in queue ~p", [?MODULE, Id, TailQueueToSearch]),
   Result = queue:out(TailQueueToSearch),
@@ -456,6 +489,7 @@ find_cmd_id_in_queue(SkippedList, TailQueueToSearch, Id) ->
     false -> find_cmd_id_in_queue([{CurrentId, Mod, Func, Args} | SkippedList], NewTailQueueToSearch, Id)
   end.
 
+-spec find_timeout_and_get_updated_ones(#state{}, timerref()) -> {'found', {mil_timeout(), [mil_timeout()]}} | {'notfound', 'undefined'}.
 find_timeout_and_get_updated_ones(#state{enabled_timeouts = EnabledTimeouts}, TimerRef) ->
   FilterFunction = fun({TimerRef1,_ , _, _, _, _, _}) -> TimerRef == TimerRef1  end,
   {RetrievedTimeoutList, NewEnabledTimeouts} = lists:partition(FilterFunction, EnabledTimeouts),

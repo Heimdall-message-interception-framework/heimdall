@@ -18,11 +18,11 @@
 
 -record(sched_event, {
                   what :: sched_event_type(),
-                  id = undefined :: number(),
+                  id = undefined :: undefined | number(),
                   name = undefined :: nonempty_string() | undefined,
                   class = undefined :: atom() | undefined,
-                  from = undefined :: pid() | atom() | nonempty_string() | undefined,
-                  to = undefined :: pid() | atom() | nonempty_string() | undefined,
+                  from = undefined :: undefined | pid(),
+                  to = undefined :: undefined | pid(),
 %%                  mesg = undefined :: any(),
 %%                  old_mesg = undefined :: any(),
                   skipped = undefined :: list(number()) | undefined,

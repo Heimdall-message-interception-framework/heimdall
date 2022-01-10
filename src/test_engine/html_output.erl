@@ -22,7 +22,7 @@ output_html(Filename, History) ->
 
 -spec write_file(binary() | maybe_improper_list(binary() | maybe_improper_list(any(), binary() | []) | char(), binary() | []), atom() | binary() | [atom() | [any()] | char()]) -> 'ok' | {'error', atom()}.
 write_file(String, Filename) ->
-    io:format("[~p] Writing file ~p~n", [?MODULE, Filename]),
+    logger:info("[~p] Writing file ~p~n", [?MODULE, Filename]),
     file:write_file(Filename, unicode:characters_to_binary(String)).
 
 -spec erlang_to_string(any()) -> string().
@@ -111,6 +111,7 @@ args_to_string(Args) ->
         false -> erlang_to_string(A) end end, Args),
     "(" ++ string:join(Strings, ", ") ++ ")".
 
+-spec pid_to_name(pid()) -> nonempty_string().
 pid_to_name(Pid) ->
     case ets:lookup(pid_name_table, Pid) of
         [ ] -> erlang_to_string(Pid);
@@ -126,18 +127,14 @@ cits_to_string(CommandsInTransit) ->
 
 % {ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}
 cit_to_string({ID, From, To, erlang, send, [_PIDTo, Msg]}) ->
-    "[" ++ erlang_to_string(ID) ++ "] " ++ erlang_to_string(From) ++ " → " ++ erlang_to_string(To) ++ ": " ++ erlang_to_string(Msg);
+    "[" ++ erlang_to_string(ID) ++ "] " ++ pid_to_name(From) ++ " → " ++ pid_to_name(To) ++ ": " ++ erlang_to_string(Msg);
 cit_to_string(Command) ->
     erlang_to_string(Command).
 
+-spec nodelist_to_string([pid()]) -> nonempty_string().
 nodelist_to_string(Nodes) ->
-    Formatted = lists:map(fun(C) -> "<li>" ++ node_to_string(C) ++ "</li>" end, Nodes),
+    Formatted = lists:map(fun(C) -> "<li>" ++ pid_to_name(C) ++ "</li>" end, Nodes),
     "<ul class=\"nodelist\">" ++ Formatted ++ "</ul>".
-
-node_to_string({_Name, PID}) ->
-    pid_to_name(PID).
-    
-
 
 html_prefix(Title) ->
 "<!doctype html>

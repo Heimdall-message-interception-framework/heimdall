@@ -7,7 +7,7 @@
 -module(message_interception_layer).
 
 -include_lib("sched_event.hrl").
-
+-include_lib("kernel/include/logger.hrl").
 -behaviour(gen_server).
 
 %% gen_server callback
@@ -18,25 +18,24 @@
 %% API for scheduling engine
 -export([no_op/1, exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
 %% Getters
--export([get_commands_in_transit/1, get_timeouts/1, get_all_node_names/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1, get_name_for_pid/1]).
+-export([get_commands_in_transit/1, get_timeouts/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1, get_name_for_pid/1, get_all_node_pids/1]).
 
 -type timerref() :: reference() | false.
 -type mil_timeout() :: any().
 -type command() :: any().
 
 -record(state, {
-  registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid()),
-  registered_pid_nodes = orddict:new() :: orddict:orddict(pid(), Name::atom()),
-  transient_crashed_nodes = sets:new() :: sets:set(atom()),
-  permanent_crashed_nodes = sets:new() :: sets:set(atom()),
-  map_commands_in_transit = orddict:new() :: orddict:orddict(FromTo::any(),
-                              queue:queue({ID::any(), Module::atom(), Function::atom(), Args::list(any())})),
-  list_commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
+  registered_node_pids = sets:new() :: sets:set(pid()),
+  transient_crashed_nodes = sets:new() :: sets:set(pid()),
+  permanent_crashed_nodes = sets:new() :: sets:set(pid()),
+  map_commands_in_transit = orddict:new() :: orddict:orddict(FromTo::{pid(), pid()},
+                              queue:queue({ID::number(), Module::atom(), Function::atom(), Args::list(any())})),
+  list_commands_in_transit = [] :: [{ID::number(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
 %%  enabled_timeouts = orddict:new() :: orddict:orddict(Proc::any(),
 %%                                                      orddict:orddict({TimerRef::reference(), {Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}})),
 %%  TODO: change to queue
-  enabled_timeouts = [] :: [{TimerRef::reference(), ID::any(), Proc::any(), Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}],
-  id_counter = 0 :: any()
+  enabled_timeouts = [] :: [{TimerRef::reference(), ID::number(), Proc::pid(), Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}],
+  id_counter = 0 :: number()
 }).
 
 %%%===================================================================
@@ -46,16 +45,25 @@
 %% FOR SUT
 
 %% registration of processes
--spec register_with_name(pid(), nonempty_string(), pid(), _) -> ok.
-register_with_name(MIL, Name, Identifier, Kind) -> % Identifier can be PID or ...
-  gen_server:call(MIL, {register, {Name, Identifier, Kind}}).
+-spec register_with_name(pid(), nonempty_string() | atom(), pid(), _) -> ok.
+register_with_name(MIL, Name, Identifier, Kind) when is_atom(Name) -> % Identifier can be PID or ...
+  logger:warning("[~p] got registration with atom ~p. Turning into string.", [?MODULE, Name]),
+  NameString = atom_to_list(Name),
+  gen_server:call(MIL, {register, {NameString, Identifier, Kind}});
+register_with_name(MIL, Name, Identifier, Kind) when is_list(Name) -> % Identifier can be PID or ...
+  logger:debug("[~p] registering ~p with pid ~p", [?MODULE, Name, Identifier]),
+  Result = gen_server:call(MIL, {register, {Name, Identifier, Kind}}),
+  logger:debug("[~p] table is now: ~p", [?MODULE, ets:tab2list(pid_name_table)]),
+  Result.
 %% de-registration of processes
 -spec deregister(pid(), nonempty_string(), pid()) -> any().
 deregister(MIL, Name, Identifier) ->
   gen_server:call(MIL, {deregister, {Name, Identifier}}).
 
 %% msg_commands
--spec msg_command(pid(), pid(), gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
+%% FIXME: To has to be a pid as well. otherwise things crash. How do I turn a server_ref into a pid()?
+% -spec msg_command(pid(), pid(), gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
+-spec msg_command(pid(), pid(), pid() | gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
 msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
 %%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
   msg_command(MIL, From, To, Module, Fun, Args);
@@ -134,9 +142,9 @@ get_commands_in_transit(MIL) ->
 get_timeouts(MIL) ->
   gen_server:call(MIL, {get_timeouts}).
 %%
--spec get_all_node_names(_) -> [{atom(), pid()}].
-get_all_node_names(MIL) ->
-  gen_server:call(MIL, {get_all_node_names}).
+-spec get_all_node_pids(_) -> [{atom(), pid()}].
+get_all_node_pids(MIL) ->
+  gen_server:call(MIL, {get_all_node_pids}).
 %%
 -spec get_name_for_pid(pid()) -> nonempty_string().
 get_name_for_pid(Pid) ->
@@ -177,7 +185,9 @@ init([]) ->
 
 -spec handle_call
   ({register, {NodeName::nonempty_string(), NodePid::pid(), _}}, {pid(),_}, #state{}) -> {reply, ok, #state{}};
-  ({get_commands}, {pid(), _}, #state{}) -> {reply, [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}], #state{}}.
+  ({get_commands}, _, #state{}) -> {reply, [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}], #state{}};
+  ({enable_to, {Time::_, ProcPid::pid(), ProcPid::pid(), Module::atom(), Fun::atom, Args::[any()]}}, _, #state{}) -> {reply, timerref(), #state{}};
+  ({msg_cmd, {FromPid :: pid(), ToPid :: pid(), Module :: atom(), Fun :: atom(), Args :: [any()]}}, _, #state{}) -> {reply, ok, #state{}}.
 %%
 handle_call({get_commands}, _From, State = #state{}) ->
   {reply, State#state.list_commands_in_transit, State};
@@ -186,12 +196,11 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
   when not is_tuple(ProcPid)->
   TimerRef = make_ref(),
   Args = [ProcPid, {mil_timeout, TimerRef, MsgContent}],
-  Proc = pid_to_node(State, ProcPid),
-  Bool_crashed = check_if_crashed(State, Proc) or check_if_crashed(State, Proc),
+  Bool_crashed = check_if_crashed(State, ProcPid),
   case Bool_crashed of
     true ->
       SchedEvent = #sched_event{what = enable_to_crsh, id = State#state.id_counter,
-        from = Proc, to = Proc, mod = Module, func = Fun, args = Args, timerref = TimerRef},
+        from = ProcPid, to = ProcPid, mod = Module, func = Fun, args = Args, timerref = TimerRef},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {reply, TimerRef, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
@@ -199,20 +208,19 @@ handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, Msg
 %%      OrddictToUpdate = orddict:fetch(Proc, State#state.enabled_timeouts),
 %%      UpdatedOrddict = orddict:append(TimerRef, {Time, Module, Fun, Args}, OrddictToUpdate),
 %%      UpdatedEnabledTimeouts = orddict:store(Proc, UpdatedOrddict, State#state.enabled_timeouts),
-      ListTimeouts1 = [ {TimerRef, State#state.id_counter, Proc, Time, Module, Fun, Args} | State#state.enabled_timeouts],
+      ListTimeouts1 = [ {TimerRef, State#state.id_counter, ProcPid, Time, Module, Fun, Args} | State#state.enabled_timeouts],
       SchedEvent = #sched_event{what = enable_to, id = State#state.id_counter,
-        from = Proc, to = Proc, mod = Module, func = Fun, args = Args, timerref = TimerRef},
+        from = ProcPid, to = ProcPid, mod = Module, func = Fun, args = Args, timerref = TimerRef},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {reply, TimerRef, State#state{id_counter = NextID, enabled_timeouts = ListTimeouts1}}
   end;
 %%
 handle_call({disable_to, {ProcPid, TimerRef}}, _From, State = #state{}) ->
-  Proc = pid_to_node(State, ProcPid),
   case find_timeout_and_get_updated_ones(State, TimerRef) of
     {found, {_TimeoutValue, NewEnabledTimeouts}} ->
       SchedEvent = #sched_event{what = disable_to, id = State#state.id_counter, timerref = TimerRef,
-        from = Proc, to = Proc},
+        from = ProcPid, to = ProcPid},
       NextId = State#state.id_counter + 1,
       msg_interception_helpers:submit_sched_event(SchedEvent),
       {reply, true, State#state{enabled_timeouts = NewEnabledTimeouts, id_counter = NextId}};
@@ -234,18 +242,15 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
       erlang:throw("tried to fire disabled timeout")
   end;
 %%
-handle_call({get_commands}, _From, State = #state{}) ->
-  {reply, State#state.list_commands_in_transit, State};
-%%
 handle_call({get_transient_crashed_nodes}, _From, #state{transient_crashed_nodes = TransientCrashedNodes} = State) ->
   {reply, TransientCrashedNodes, State};
 %%
 handle_call({get_permanent_crashed_nodes}, _From, #state{permanent_crashed_nodes = PermanentCrashedNodes} = State) ->
   {reply, PermanentCrashedNodes, State};
 %%
-handle_call({get_all_node_names}, _From, #state{} = State) ->
-  NodeNames = orddict:to_list(State#state.registered_nodes_pid),
-  % NodeNames = get_all_node_names_from_state(State),
+handle_call({get_all_node_pids}, _From, #state{} = State) ->
+  NodeNames = sets:to_list(State#state.registered_node_pids),
+  % NodeNames = get_all_node_pids_from_state(State),
   {reply, NodeNames, State};
 %%
 handle_call({get_timeouts}, _From, State = #state{}) ->
@@ -256,31 +261,25 @@ handle_call({get_timeouts}, _From, State = #state{}) ->
 %   {stop, Reason :: term(), NewState :: #state{}}).
 %%
 handle_call({register, {NodeName, NodePid, NodeClass}}, _From, State) ->
-  {NodeNameAtom, NodeNameString} = case is_atom(NodeName) of
-    true -> {NodeName, atom_to_list(NodeName)};
-    false -> {list_to_atom(NodeName), NodeName} end,
-  ets:insert(pid_name_table, {NodePid, NodeNameString}),
-  NewRegisteredNodesPid = orddict:store(NodeNameAtom, NodePid, State#state.registered_nodes_pid),
-  NewRegisteredPidNodes = orddict:store(NodePid, NodeNameAtom, State#state.registered_pid_nodes),
-  AllOtherNames = get_all_node_names_from_state(State),
-  CmdListNewQueues = [{{Other, NodeNameAtom}, queue:new()} || Other <- AllOtherNames] ++
-                  [{{NodeNameAtom, Other}, queue:new()} || Other <- AllOtherNames],
+  ets:insert(pid_name_table, {NodePid, NodeName}),
+  NewRegisteredNodesPid = sets:add_element(NodePid, State#state.registered_node_pids),
+  AllOtherPidsList = get_all_node_pids_from_state(State),
+  CmdListNewQueues = [{{Other, NodePid}, queue:new()} || Other <- AllOtherPidsList] ++
+                  [{{NodePid, Other}, queue:new()} || Other <- AllOtherPidsList],
   CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
   Fun = fun({_, _}, _, _) -> undefined end,
   NewCommandStore = orddict:merge(Fun, State#state.map_commands_in_transit, CmdOrddictNewQueues),
-  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeNameAtom, class = NodeClass},
+  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeName, class = NodeClass},
   NextId = State#state.id_counter + 1,
   msg_interception_helpers:submit_sched_event(SchedEvent),
-  {reply, ok, State#state{registered_nodes_pid = NewRegisteredNodesPid,
-                        registered_pid_nodes = NewRegisteredPidNodes,
+  {reply, ok, State#state{registered_node_pids = NewRegisteredNodesPid,
                         map_commands_in_transit = NewCommandStore,
                         id_counter = NextId}};
-handle_call({deregister, {NodeName, NodePid}}, _From, State) ->
+handle_call({deregister, {_NodeName, NodePid}}, _From, State) ->
   ets:delete(pid_name_table, NodePid),
-  NewRegisteredNodesPid = orddict:erase(NodeName, State#state.registered_nodes_pid),
-  NewRegisteredPidNodes = orddict:erase(NodePid, State#state.registered_pid_nodes),
+  NewRegisteredPidNodes = sets:del_element(NodePid, State#state.registered_node_pids),
 %%  TODO: remove from CommandStore
-%%  AllOtherNames = get_all_node_names_from_state(State),
+%%  AllOtherNames = get_all_node_pids_from_state(State),
 %%  CmdListNewQueues = [{{Other, NodeName}, queue:new()} || Other <- AllOtherNames] ++
 %%    [{{NodeName, Other}, queue:new()} || Other <- AllOtherNames],
 %%  CmdOrddictNewQueues = orddict:from_list(CmdListNewQueues),
@@ -290,39 +289,44 @@ handle_call({deregister, {NodeName, NodePid}}, _From, State) ->
 %%  SchedEvent = #sched_event{what = reg_node, id = State#state.id_counter, name = NodeName},
 %%  NextId = State#state.id_counter + 1,
 %%  msg_interception_helpers:submit_sched_event(SchedEvent),
-  {reply, ok, State#state{registered_nodes_pid = NewRegisteredNodesPid,
-    registered_pid_nodes = NewRegisteredPidNodes
+  {reply, ok, State#state{registered_node_pids = NewRegisteredPidNodes
 %%    map_commands_in_transit = NewCommandStore,
 %%    id_counter = NextId
  }};
+handle_call({msg_cmd, {FromPid, ToAtom, Module, Fun, Args}}, _From, State = #state{}) when is_atom(ToAtom) ->
+  logger:warning("[~p] got msg_cmd for ~p. Trying to find pid for ~p in table ~p", [?MODULE, ToAtom, atom_to_list(ToAtom), ets:tab2list(pid_name_table)]),
+  PidList = ets:match(pid_name_table, {'$1', atom_to_list(ToAtom)}),
+  if length(PidList) > 1 -> logger:warning("[~p] found more than one valid PID: ~p trying the newest.", [?MODULE, PidList]);
+     true -> ok end,
+  [ToPid] = lists:last(PidList),
+  logger:warning("[~p] using pid ~p for ~p.", [?MODULE, ToPid, ToAtom]),
+  handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State);
 handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State = #state{})
   when not is_tuple(ToPid)->
-  From = pid_to_node(State, FromPid),
-  To = case is_pid(ToPid) of
-         true -> pid_to_node(State, ToPid);
-         _ -> ToPid
-       end,
-  Bool_crashed = check_if_crashed(State, To) or check_if_crashed(State, From),
+  case is_pid(ToPid) of
+    true -> ok;
+    false -> logger:error("[~p] Expected PID but got ~p in msg_cmd", [?MODULE, ToPid]) end,
+  Bool_crashed = check_if_crashed(State, ToPid) or check_if_crashed(State, FromPid),
 %%  Bool_whitelisted = check_if_whitelisted(Module, Fun, Args),
   if
     Bool_crashed ->
       SchedEvent = #sched_event{what = cmd_rcv_crsh, id = State#state.id_counter,
-        from = From, to = To, mod = Module, func = Fun, args = Args},
+        from = FromPid, to = ToPid, mod = Module, func = Fun, args = Args},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {reply, ok, State#state{id_counter = NextID}};  % if crashed, do also not let whitelisted trough
 %%    Bool_whitelisted -> do_exec_cmd(Module, Fun, Args),
 %%      {noreply, State};
     true ->
-      QueueToUpdate = orddict:fetch({From, To}, State#state.map_commands_in_transit),
+      QueueToUpdate = orddict:fetch({FromPid, ToPid}, State#state.map_commands_in_transit),
       UpdatedQueue = queue:in({State#state.id_counter, Module, Fun, Args}, QueueToUpdate),
-      UpdatedCommandsInTransit = orddict:store({From, To}, UpdatedQueue, State#state.map_commands_in_transit),
+      UpdatedCommandsInTransit = orddict:store({FromPid, ToPid}, UpdatedQueue, State#state.map_commands_in_transit),
 %%      UpdatedListCommandsInTransit = State#state.list_commands_in_transit ++
 %%        [{State#state.id_counter, From, To, Module, Fun, Args}],
       UpdatedListCommandsInTransit =
-        [ {State#state.id_counter, From, To, Module, Fun, Args} | State#state.list_commands_in_transit ],
+        [ {State#state.id_counter, FromPid, ToPid, Module, Fun, Args} | State#state.list_commands_in_transit ],
       SchedEvent = #sched_event{what = cmd_rcv, id = State#state.id_counter,
-        from = From, to = To, mod = Module, func = Fun, args = Args},
+        from = FromPid, to = ToPid, mod = Module, func = Fun, args = Args},
       msg_interception_helpers:submit_sched_event(SchedEvent),
       NextID = State#state.id_counter + 1,
       {reply, ok, State#state{map_commands_in_transit = UpdatedCommandsInTransit,
@@ -375,7 +379,7 @@ handle_call({drop, {Id, From, To}}, _From, State = #state{}) ->
 handle_call({crash_trans, {NodeName}}, _From, State = #state{}) ->
   % io:format("[~p] crash_trans. commands in transit: ~p", [?MODULE, State#state.map_commands_in_transit]),
   UpdatedCrashTrans = sets:add_element(NodeName, State#state.transient_crashed_nodes),
-  ListQueuesToEmpty = [{Other, NodeName} || Other <- get_all_node_names_from_state(State), Other /= NodeName],
+  ListQueuesToEmpty = [{Other, NodeName} || Other <- get_all_node_pids_from_state(State), Other /= NodeName],
   NewCommandsStore = lists:foldl(fun({From, To}, SoFar) -> orddict:store({From, To}, queue:new(), SoFar) end,
               State#state.map_commands_in_transit,
               ListQueuesToEmpty),
@@ -402,7 +406,7 @@ handle_call({rejoin, {NodeName}}, _From, State = #state{}) ->
 handle_call({crash_perm, {NodeName}}, _From, State = #state{}) ->
 %%  we keep the outgoing channels since these are messages that were sent before (still scheduable)
   UpdatedCrashPerm = sets:add_element(NodeName, State#state.permanent_crashed_nodes),
-  ListQueuesToDelete = [{Other, NodeName} || Other <- get_all_node_names_from_state(State), Other /= NodeName],
+  ListQueuesToDelete = [{Other, NodeName} || Other <- get_all_node_pids_from_state(State), Other /= NodeName],
   NewCommandStore = lists:foldl(fun({From, To}, SoFar) -> orddict:erase({From, To}, SoFar) end,
     State#state.map_commands_in_transit,
     ListQueuesToDelete),
@@ -446,22 +450,22 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%  {ok, Pid} = orddict:find(Node, State#state.registered_nodes_pid),
 %%  Pid.
 
--spec pid_to_node(#state{}, pid()) -> nonempty_string().
-pid_to_node(State, Pid) ->
-  case orddict:find(Pid, State#state.registered_pid_nodes) of
-    {ok, Node} -> Node;
-    _ -> NameInTable = ets:lookup(pid_name_table, Pid),
-      erlang:display(["NameInTable", NameInTable]),
-      erlang:error([pid_not_registered, Pid])
-  end.
+% -spec pid_to_node(#state{}, pid()) -> nonempty_string().
+% pid_to_node(State, Pid) ->
+%   case orddict:find(Pid, State#state.registered_pid_nodes) of
+%     {ok, Node} -> Node;
+%     _ -> NameInTable = ets:lookup(pid_name_table, Pid),
+%       erlang:display(["NameInTable", NameInTable]),
+%       erlang:error([pid_not_registered, Pid])
+%   end.
 
 -spec check_if_crashed(#state{}, pid()) -> boolean().
 check_if_crashed(State, To) ->
   sets:is_element(To, State#state.transient_crashed_nodes) or sets:is_element(To, State#state.permanent_crashed_nodes).
 
--spec get_all_node_names_from_state(#state{}) -> [pid()].
-get_all_node_names_from_state(State) ->
-  orddict:fetch_keys(State#state.registered_nodes_pid).
+-spec get_all_node_pids_from_state(#state{}) -> [pid()].
+get_all_node_pids_from_state(State) ->
+  sets:to_list(State#state.registered_node_pids).
 
 -spec find_cmd_and_get_updated_commands_in_transit(#state{}, atom(), pid(), pid()) -> {atom(), atom(), [any()], [command()], [command()]}.
 find_cmd_and_get_updated_commands_in_transit(State, Id, From, To) ->

@@ -42,7 +42,7 @@ init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
 init([SUTModule, Scheduler, BootstrapScheduler]) ->
     %% start pid_name_table
-    ets:new(pid_name_table, [named_table, {read_concurrency, true}, public]),
+    ets:new(pid_name_table, [named_table, {read_concurrency, true}, ordered_set, public]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
@@ -136,7 +136,10 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
         true ->
             case maps:get(test_name, Config, undefined) of
                 undefined -> erlang:throw("Test name undefined but HTML output requested.");
-                TestName -> html_output:output_html(io_lib:format("~p_~p", [TestName, RunId]), Run)
+                TestName ->
+                    Filename = io_lib:format("~p_~p", [TestName, RunId]),
+                    logger:info("[~p] requesting html file generation: ~p", [?MODULE, Filename]),
+                    html_output:output_html(Filename, Run)
             end
     end,
 
@@ -185,7 +188,7 @@ collect_state(MIL, SUTModule) ->
         properties = PropValues,
         commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
         timeouts = message_interception_layer:get_timeouts(MIL),
-        nodes = message_interception_layer:get_all_node_names(MIL),
+        nodes = message_interception_layer:get_all_node_pids(MIL),
         crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL)),
         % TODO: support permanent crashes
         abstract_state = AbstractState

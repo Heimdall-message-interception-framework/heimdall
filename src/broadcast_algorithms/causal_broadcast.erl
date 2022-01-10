@@ -40,7 +40,7 @@ init([LL, Name, R]) ->
 handle_call({rco_broadcast, Msg}, _From, State) ->
 	%%% OBS
     gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg
@@ -54,7 +54,7 @@ handle_call({rco_broadcast, Msg}, _From, State) ->
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
 	%%% OBS
     gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -94,7 +94,7 @@ deliver_pending(State, Pending, Vc) ->
                              State#state.deliver_to ! {deliver, M},
                             %%% OBS
                             gen_event:sync_notify({global,om}, {process, #obs_process_event{
-                                process = State#state.self,
+                                process = self(),
                                 event_type = bc_delivered_event,
                                 event_content = #bc_delivered_event{
                                     message = M

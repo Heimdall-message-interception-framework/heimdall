@@ -41,7 +41,7 @@ init([LL, Name, R]) ->
 handle_call({broadcast, Msg}, _From, State) ->
 	%%% OBS
 	Event = {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg
@@ -59,7 +59,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 	best_effort_broadcast_paper:broadcast(State#state.beb, {State#state.self, Mid, Msg}),
 	%%% OBS
     gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -80,7 +80,7 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			State#state.deliver_to ! {deliver, Msg},
 			%%% OBS
 			Event = {process, #obs_process_event{
-				process = State#state.self,
+				process = self(),
 				event_type = bc_delivered_event,
 				event_content = #bc_delivered_event{
 					message = Msg
@@ -93,7 +93,7 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			%%% OBS
 			gen_event:sync_notify({global,om}, {process, #obs_process_event{
-				process = State#state.self,
+				process = self(),
 				event_type = bc_broadcast_event,
 				event_content = #bc_broadcast_event{
 					message = Msg

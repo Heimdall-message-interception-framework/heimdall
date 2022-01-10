@@ -3012,8 +3012,7 @@ post_observation_events(PrevState, _PrevData, Result, StateCall) ->
   end.
 
 notify_about_statem_event(Event, EvType) ->
-  ProcName = message_interception_layer:get_name_for_pid(self()),
-  ProcEvent = #obs_process_event{process = ProcName, event_type = EvType, event_content = Event},
+  ProcEvent = #obs_process_event{process = self(), event_type = EvType, event_content = Event},
   gen_event:sync_notify({global, om}, {process, ProcEvent}).
 
 %% SBO

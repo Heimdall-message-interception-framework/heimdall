@@ -110,22 +110,24 @@ handle_event({process, #obs_process_event{process = Proc, event_type = bc_delive
                 vc_p = maps:put(Proc, NewVC, State#state.vc_p),
                 vc_m = MsgVCs})};
     true -> {ok, State} end;
-handle_event({sched, #sched_event{what = exec_msg_cmd, from = From, to = To}}, State) ->
+handle_event({sched, #sched_event{what = exec_msg_cmd, from = From, to = To}} = Event, State) ->
+    logger:debug("received event: ~p, name_table is: ~p", [Event, ets:tab2list(pid_name_table)]),
     % normalize names
     {_, Suffix} = proc_base_names(sets:to_list(State#state.listen_to)),
     % format to string if not already string
-    From2 = case is_atom(From) of
-        true -> atom_to_list(From);
-        false -> From end,
-    To2 = case is_atom(To) of
-        true -> atom_to_list(To);
-        false -> To end,
-    FromStr = From2 ++ "_" ++ Suffix,
-    ToStr = To2 ++ "_" ++ Suffix,
+    % compute basenames
+    [{_, FromStr}] = ets:lookup(pid_name_table, From),
+    {[FromBase] , _} = proc_base_names([FromStr]),
+    [{_, ToStr}] = ets:lookup(pid_name_table, To),
+    {[ToBase] , _} = proc_base_names([ToStr]),
+    FromFull = FromBase ++ "_" ++ Suffix,
+    ToFull = ToBase ++ "_" ++ Suffix,
     % check if the name corresponds to the bc processes that we are listening to
-    case sets:is_element(FromStr, State#state.listen_to) or 
-            sets:is_element(To, State#state.listen_to) of
+    case sets:is_element(FromFull, State#state.listen_to) or 
+            sets:is_element(ToFull, State#state.listen_to) of
         true -> 
+            logger:debug("received msg_event from ~p to ~p", [FromFull, ToFull]),
+    % normalize names
             % io:format("[~p] Received msg_event, from: ~p, to: ~p",
             %     [?MODULE, From, To]),
             % To receives a message from From -> update To's vectorclock

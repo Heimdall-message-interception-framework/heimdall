@@ -3,7 +3,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--export([all/0, test_engine/1, test_module/1, init_per_testcase/2, test_scheduler_bfs/1, test_scheduler_pct/1]).
+-export([all/0, test_engine/1, test_module/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1, test_scheduler_bfs/1, test_scheduler_pct/1]).
 
 all() -> [
    test_module,
@@ -13,6 +13,9 @@ all() -> [
 ].
 
 init_per_suite(Config) ->
+  logger:set_primary_config(level, debug),
+  LogConf = #{config => #{file => "./MIL_log.log"}, level => debug},
+  logger:add_handler(myhandler, logger_std_h, LogConf),
   Config.
 
 end_per_suite(_Config) ->

@@ -305,7 +305,7 @@ build_5th_stage(AbsLogTree) ->
 
 build_5th_stage_rec(AbsLogTree = #abs_log_tree{part_info = PartInfo, children = Children}, MapLeaderTermDummyTerm) ->
   PartInfo1 = lists:map(
-    fun(PerPartInfo = #per_part_abs_info{role = State, commit_index = CommIndex, term = CurrentTerm}) ->
+    fun(PerPartInfo = #per_part_abs_info{role = State, term = CurrentTerm}) ->
       case State == leader of
         true -> PerPartInfo#per_part_abs_info{term = maps:get(CurrentTerm, MapLeaderTermDummyTerm)};
         false -> PerPartInfo#per_part_abs_info{term = undefined}

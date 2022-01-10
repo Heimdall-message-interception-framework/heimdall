@@ -2943,26 +2943,20 @@ list_timeouts(Timers) ->
 %%%% function to output callback_result as events for observer
 post_observation_events(PrevState, _PrevData, Result, StateCall) ->
   case Result of
-    {next_state,State,NewData} ->
-      Event = #statem_transition_event{state = {next_state, State}, data = {next_data, NewData}},
-      notify_about_statem_event(Event, statem_transition_event);
     {next_state,NextState,NewData}
       when StateCall ->
       Event = #statem_transition_event{state = {next_state, NextState}, data = {next_data, NewData}},
       notify_about_statem_event(Event, statem_transition_event);
-    {next_state,_NextState,_NewData} ->
-%%      for completeness
-      ok;
-    {next_state,State,NewData,_Actions} ->
+    {next_state,State,NewData} ->
       Event = #statem_transition_event{state = {next_state, State}, data = {next_data, NewData}},
       notify_about_statem_event(Event, statem_transition_event);
     {next_state,NextState,NewData,_Actions}
       when StateCall ->
       Event = #statem_transition_event{state = {next_state, NextState}, data = {next_data, NewData}},
       notify_about_statem_event(Event, statem_transition_event);
-    {next_state,_NextState,_NewData,_Actions} ->
-%%      for completeness
-      ok;
+    {next_state,State,NewData,_Actions} ->
+      Event = #statem_transition_event{state = {next_state, State}, data = {next_data, NewData}},
+      notify_about_statem_event(Event, statem_transition_event);
     {keep_state,NewData} ->
       Event = #statem_transition_event{state = {keep_state, PrevState}, data = {next_data, NewData}},
       notify_about_statem_event(Event, statem_transition_event);

@@ -156,8 +156,6 @@ init([]) ->
   ({register, {NodeName::nonempty_string(), NodePid::atom(), _}}, {pid(),_}, #state{}) -> {reply, ok, #state{}};
   ({get_commands}, {pid(), _}, #state{}) -> {reply, [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}], #state{}}.
 %%
-handle_call({get_commands}, _From, State = #state{}) ->
-  {reply, State#state.list_commands_in_transit, State};
 handle_call({enable_to, {Time, ProcPid, ProcPid, Module, Fun, [{mil_timeout, MsgContent}]}}, _From,
     State = #state{})
   when not is_tuple(ProcPid)->

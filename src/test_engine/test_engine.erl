@@ -80,7 +80,9 @@ terminate(Reason, _State) ->
 -spec explore1(atom(), #{atom() => any()}, [#abstract_instruction{}], integer(), #state{}, integer()) -> history().
 explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
-    % start MIL 
+    % empty ets table (we use the same name across all)
+    ets:delete_all_objects(pid_name_table),
+    % start MIL
     {ok, MIL} = message_interception_layer:start(),
     ets:insert(pid_name_table, {MIL, "MIL"}),
     erlang:monitor(process, MIL),

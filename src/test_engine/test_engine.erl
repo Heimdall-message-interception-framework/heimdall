@@ -141,7 +141,8 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
                 TestName ->
                     Filename = io_lib:format("~p_~p", [TestName, RunId]),
                     logger:info("[~p] requesting html file generation: ~p", [?MODULE, Filename]),
-                    html_output:output_html(Filename, Run)
+                    PidNameMap = maps:from_list(ets:tab2list(pid_name_table)),
+                    html_output:output_html(Filename, Run, PidNameMap)
             end
     end,
 

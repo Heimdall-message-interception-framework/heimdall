@@ -5,10 +5,17 @@
 -include("sched_event.hrl").
 -include("raft_observer_events.hrl").
 
+-dialyzer(underspecs).
+
 -export([init/1, handle_call/2, handle_event/2]).
 
+-type participant() :: nonempty_string().
+-type log_entry() :: {Index :: integer(), Data :: any()}.
+-type raft_node_state() :: recover | recovered | leader | pre_vote | candidate | follower |
+                     receive_snapshot | await_condition | terminating_leader | terminating_follower.
+
 -record(log_tree, { % root always has "undefined" data -> option for multiple children on 1st level
-  data = undefined :: any() | undefined,
+  data = undefined :: log_entry() | undefined,
   end_parts = [] :: [any()],
   commit_index_parts = [] :: [any()],
   children = [] :: [#log_tree{}],
@@ -16,10 +23,10 @@
 }).
 
 -record(per_part_abs_info, {
-  role :: any(),
-  commit_index :: any(),
+  role :: raft_node_state(),
+  commit_index :: integer(),
   voted_for_less :: true | false | not_given,
-  term = undefined :: any() | undefined
+  term = undefined :: integer() | undefined
 }).
 
 -record(abs_log_tree, { % root also may have multiple children in abstract state
@@ -28,21 +35,19 @@
 }).
 
 -record(per_part_state, {
-  log = array:new({default, undefined}) :: array:array(any()),
-  state = recover :: recover | recovered | leader | pre_vote | candidate | follower | receive_snapshot |
-                     await_condition | terminating_leader | terminating_follower,
+  log = array:new({default, undefined}) :: array:array(log_entry()),
+  state = recover :: raft_node_state(),
   commit_index = 0 :: integer(),
   current_term = 0 :: integer(),
-  voted_for = undefined :: integer() | undefined
+  voted_for = undefined :: participant() | undefined
 }).
 
 -record(state, {
-    history_of_events = queue:new() :: queue:queue(),
-    all_participants = [] :: [any()],
-    part_to_state_map = maps:new() :: #{any() => #per_part_state{}}
+    history_of_events = queue:new() :: queue:queue({'process', #obs_process_event{}} | {'sched', #sched_event{}}),
+    all_participants = [] :: [participant()],
+    part_to_state_map = maps:new() :: #{participant() => #per_part_state{}}
 }).
 
-%%    TO ADD: initialise added fields if necessary
 -spec init(_) -> {'ok', #state{}}.
 init(_) ->
     {ok, #state{}}.
@@ -51,13 +56,13 @@ init(_) ->
 -spec handle_event({sched, #sched_event{}}, #state{}) -> {'ok', #state{}};
                   ({process, #obs_process_event{}}, #state{}) -> {ok, #state{}}.
 handle_event({sched,
-  #sched_event{what = reg_node, name = Name, class = ra_server_proc} = SchedEvent},
+  #sched_event{what = reg_node, class = ra_server_proc, name = ProcName} = SchedEvent},
     #state{all_participants = AllParts, part_to_state_map = PartStateMap} = State) ->
 %%    store event in history of events
   State1 = add_to_history(State, {sched, SchedEvent}),
 %%  update all participants and state map
-  AllParts1 = [Name | AllParts],
-  PartStateMap1 = maps:put(Name, #per_part_state{}, PartStateMap),
+  AllParts1 = [ProcName | AllParts],
+  PartStateMap1 = maps:put(ProcName, #per_part_state{}, PartStateMap),
   State2 = State1#state{all_participants = AllParts1, part_to_state_map = PartStateMap1},
   {ok, State2};
 %% listen to process event updates
@@ -95,29 +100,27 @@ add_to_history(State, GeneralEvent) ->
     State#state{history_of_events = NewHistory}.
 
 -spec update_state(#state{}, #obs_process_event{}) -> #state{}.
-update_state(State = #state{all_participants = AllParts},
-    #obs_process_event{process = Proc, event_type = EvType, event_content = EvContent}) ->
-  ProcName1 = case lists:member(Proc, AllParts) of
-    false -> list_to_atom(message_interception_layer:get_name_for_pid(Proc));
-    true -> Proc
-  end,
+update_state(State,
+    #obs_process_event{process = ProcPid, event_type = EvType, event_content = EvContent}) ->
+  % Extract participant's name (as atom) from ProcPid
+  ProcName = message_interception_layer:get_name_for_pid(ProcPid),
   State1 = case EvType of
-    ra_log -> handle_ra_log(State, ProcName1, EvContent);
+    ra_log -> handle_ra_log(State, ProcName, EvContent);
     ra_machine_state_update -> State;
     ra_machine_reply_write -> State;
     ra_machine_reply_read -> State;
     ra_machine_side_effects -> State;
-    ra_server_state_variable -> handle_ra_state_variable(State, ProcName1, EvContent);
-    statem_transition_event -> handle_statem_transition(State, ProcName1, EvContent);
+    ra_server_state_variable -> handle_ra_state_variable(State, ProcName, EvContent);
+    statem_transition_event -> handle_statem_transition(State, ProcName, EvContent);
     statem_stop_event -> State;
-    _ -> erlang:display("unhandled type of event")
+    _ -> erlang:throw("unhandled type of event")
   end,
   State1.
 
--spec handle_ra_log(#state{}, pid(), #ra_log_obs_event{}) -> #state{}.
-handle_ra_log(State = #state{part_to_state_map = PartStateMap}, Proc,
+-spec handle_ra_log(#state{}, participant(), #ra_log_obs_event{}) -> #state{}.
+handle_ra_log(State = #state{part_to_state_map = PartStateMap}, Part,
     #ra_log_obs_event{idx = Idx, term = Term, data = Data, trunc = Trunc}) ->
-  PartRecord = maps:get(Proc, PartStateMap),
+  PartRecord = maps:get(Part, PartStateMap),
   PartLog = PartRecord#per_part_state.log,
   PartLog1 = case Trunc of
     true -> array:resize(Idx); % Idx starts at 0 but we truncate one before current Idx
@@ -130,10 +133,10 @@ handle_ra_log(State = #state{part_to_state_map = PartStateMap}, Proc,
   end,
   PartLog2 = array:set(Idx, {Term, Data}, PartLog1),
   PartRecord1 = PartRecord#per_part_state{log = PartLog2},
-  PartStateMap1 = maps:update(Proc, PartRecord1, PartStateMap),
+  PartStateMap1 = maps:update(Part, PartRecord1, PartStateMap),
   State#state{part_to_state_map = PartStateMap1}.
 
--spec handle_ra_state_variable(#state{}, pid(), #ra_server_state_variable_obs_event{}) -> #state{}.
+-spec handle_ra_state_variable(#state{}, participant(), #ra_server_state_variable_obs_event{}) -> #state{}.
 handle_ra_state_variable(State = #state{part_to_state_map = PartStateMap}, Proc,
     #ra_server_state_variable_obs_event{state_variable = current_term, value = Value}) ->
   PartRecord = maps:get(Proc, PartStateMap),
@@ -153,13 +156,19 @@ handle_ra_state_variable(State = #state{part_to_state_map = PartStateMap}, Proc,
     {ActualValue1, _} -> ActualValue1; % TODO: this is a hack because of bad naming scheme in ra
     Other -> Other
   end,
-  PartRecord1 = PartRecord#per_part_state{voted_for = ActualValue},
+  VotedForString =
+    if
+       ActualValue =:= undefined -> undefined;
+       % transform voted_for identifier to String if needed
+       is_atom(ActualValue) -> atom_to_list(ActualValue);
+       is_list(ActualValue) -> ActualValue end,
+  PartRecord1 = PartRecord#per_part_state{voted_for = VotedForString},
   PartStateMap1 = maps:update(Proc, PartRecord1, PartStateMap),
   State#state{part_to_state_map = PartStateMap1};
 handle_ra_state_variable(State, _Proc, #ra_server_state_variable_obs_event{state_variable = _}) ->
   State.
 
--spec handle_statem_transition(#state{}, pid(), #statem_transition_event{}) -> #state{}.
+-spec handle_statem_transition(#state{}, participant(), #statem_transition_event{}) -> #state{}.
 handle_statem_transition(State = #state{part_to_state_map = PartStateMap}, Proc,
     #statem_transition_event{state = {next_state, NewState}}) ->
   PartRecord = maps:get(Proc, PartStateMap),
@@ -181,7 +190,7 @@ build_1st_stage(#state{part_to_state_map = PartStateMap} = _State) ->
   LogTree.
 
 %% case 1: data is undefined, no children and log empty
--spec add_log_to_log_tree(#log_tree{}, nonempty_list(), pid(), integer()) -> #log_tree{}.
+-spec add_log_to_log_tree(#log_tree{}, nonempty_list(), participant(), integer()) -> #log_tree{}.
 add_log_to_log_tree(LogTree =
   #log_tree{data = undefined, children = [], end_parts = EndParts, commit_index_parts = CommIndexParts},
   _LogToAdd = [], Proc, CommitIndex) ->
@@ -226,7 +235,7 @@ add_log_to_log_tree(LogTree = #log_tree{children = Children, commit_index_parts 
                  end,
   LogTree#log_tree{children = Children2, commit_index_parts = CommIndexParts1}.
 
--spec turn_log_to_log_tree(nonempty_list(), pid(), integer()) -> #log_tree{}.
+-spec turn_log_to_log_tree(nonempty_list(), participant(), integer()) -> #log_tree{}.
 turn_log_to_log_tree([Entry | Log], Proc, CommitIndex) ->
   LogTree = case CommitIndex == 0 of
               true -> #log_tree{data=Entry, commit_index_parts = [Proc]};
@@ -318,17 +327,17 @@ build_4th_stage(#log_tree{commit_index_parts = CommIndexParts, children = Childr
 
 -spec build_5th_stage(#abs_log_tree{}) -> #abs_log_tree{}.
 build_5th_stage(AbsLogTree) ->
-  AllLeaderTermsSet = sets:from_list(get_all_leader_terms(AbsLogTree)),
+  AllLeaderTermsSet = get_all_leader_terms(AbsLogTree),
   AllLeaderTermsSorted = lists:sort(sets:to_list(AllLeaderTermsSet)),
   MapLeaderTermDummyTerm = maps:from_list(lists:zip(
     AllLeaderTermsSorted, lists:seq(1, length(AllLeaderTermsSorted))
   )),
   build_5th_stage_rec(AbsLogTree, MapLeaderTermDummyTerm).
 
--spec build_5th_stage_rec(#abs_log_tree{}, _) -> #abs_log_tree{}.
+-spec build_5th_stage_rec(#abs_log_tree{}, #{}) -> #abs_log_tree{}.
 build_5th_stage_rec(AbsLogTree = #abs_log_tree{part_info = PartInfo, children = Children}, MapLeaderTermDummyTerm) ->
   PartInfo1 = lists:map(
-    fun(PerPartInfo = #per_part_abs_info{role = State, commit_index = CommIndex, term = CurrentTerm}) ->
+    fun(PerPartInfo = #per_part_abs_info{role = State, term = CurrentTerm}) ->
       case State == leader of
         true -> PerPartInfo#per_part_abs_info{term = maps:get(CurrentTerm, MapLeaderTermDummyTerm)};
         false -> PerPartInfo#per_part_abs_info{term = undefined}
@@ -338,17 +347,17 @@ build_5th_stage_rec(AbsLogTree = #abs_log_tree{part_info = PartInfo, children = 
   Children1 = lists:map(fun(Child) -> build_5th_stage(Child) end, Children),
   AbsLogTree#abs_log_tree{part_info = PartInfo1, children = Children1}.
 
--spec get_all_leader_terms(#abs_log_tree{}) -> [_].
+-spec get_all_leader_terms(#abs_log_tree{}) -> sets:set(#per_part_abs_info{}).
 get_all_leader_terms(AbsLogTree) ->
   ListProcInfo = get_all_proc_info_rec(AbsLogTree),
   TermAccFunc = fun(#per_part_abs_info{role = State, term = Term}, Acc) -> case State == leader of
                                                true -> sets:add_element(Term, Acc);
                                                false -> Acc
                                              end end,
-  LeaderTermsList = lists:foldl(TermAccFunc, sets:new(), ListProcInfo),
-  LeaderTermsList.
+  LeaderTermsSet = lists:foldl(TermAccFunc, sets:new(), ListProcInfo),
+  LeaderTermsSet.
 
--spec get_all_proc_info_rec(#abs_log_tree{}) -> [any()].
+-spec get_all_proc_info_rec(#abs_log_tree{}) -> [#per_part_abs_info{}].
 get_all_proc_info_rec(#abs_log_tree{children = Children, part_info = PartInfo}) ->
   ChildrenInfo = lists:append(lists:map(fun(Child) -> get_all_proc_info_rec(Child) end, Children)),
   lists:append(PartInfo, ChildrenInfo).

@@ -16,6 +16,7 @@
 
 -export_type([sched_event_type/0]).
 
+% TODO: jh: I think we should properly split up this data structure and only send the information that is needed for each event type
 -record(sched_event, {
                   what :: sched_event_type(),
                   id = undefined :: undefined | number(),

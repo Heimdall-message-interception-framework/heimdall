@@ -61,7 +61,6 @@ deregister(MIL, Name, Identifier) ->
   gen_server:call(MIL, {deregister, {Name, Identifier}}).
 
 %% msg_commands
-%% FIXME: To has to be a pid as well. otherwise things crash. How do I turn a server_ref into a pid()?
 % -spec msg_command(pid(), pid(), gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
 -spec msg_command(pid(), pid(), pid() | gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
 msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
@@ -294,12 +293,12 @@ handle_call({deregister, {_NodeName, NodePid}}, _From, State) ->
 %%    id_counter = NextId
  }};
 handle_call({msg_cmd, {FromPid, ToAtom, Module, Fun, Args}}, _From, State = #state{}) when is_atom(ToAtom) ->
-  logger:warning("[~p] got msg_cmd for ~p. Trying to find pid for ~p in table ~p", [?MODULE, ToAtom, atom_to_list(ToAtom), ets:tab2list(pid_name_table)]),
+  logger:notice("[~p] got msg_cmd for ~p. Trying to find pid for ~p in table ~p", [?MODULE, ToAtom, atom_to_list(ToAtom), ets:tab2list(pid_name_table)]),
   PidList = ets:match(pid_name_table, {'$1', atom_to_list(ToAtom)}),
   if length(PidList) > 1 -> logger:warning("[~p] found more than one valid PID: ~p trying the newest.", [?MODULE, PidList]);
      true -> ok end,
   [ToPid] = lists:last(PidList),
-  logger:warning("[~p] using pid ~p for ~p.", [?MODULE, ToPid, ToAtom]),
+  logger:notice("[~p] using pid ~p for ~p.", [?MODULE, ToPid, ToAtom]),
   handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State);
 handle_call({msg_cmd, {FromPid, ToPid, Module, Fun, Args}}, _From, State = #state{})
   when not is_tuple(ToPid)->

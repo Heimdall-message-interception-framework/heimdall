@@ -78,7 +78,7 @@ handle_event({process,
 handle_event(_Event, State) ->
     {ok, State}.
 
--spec handle_call(get_result, #state{}) -> {ok, #abs_log_tree{}, #state{}};
+-spec handle_call(get_result, #state{}) -> {ok, {#log_tree{}, #abs_log_tree{}}, #state{}};
                  (get_length_history, #state{}) -> {ok, integer(), #state{}}.
 handle_call(get_result, #state{} = State) ->
     Stage1 = build_1st_stage(State),   % build log-tree one by one with commit-index
@@ -86,8 +86,9 @@ handle_call(get_result, #state{} = State) ->
     Stage2 = build_2nd_stage(Stage1),
     Stage3 = build_3rd_stage(Stage2),  % collapse entries
     Stage4 = build_4th_stage(Stage3, State),
-    Stage5 = build_5th_stage(Stage4),
-    {ok, Stage5, State};
+    AbstractLogTree = build_5th_stage(Stage4),
+    ConcreteLogTree = Stage1,
+    {ok, {ConcreteLogTree, AbstractLogTree}, State};
 handle_call(get_length_history, #state{history_of_events = HistoryOfEvents} = State) ->
     {ok, queue:len(HistoryOfEvents), State};
 handle_call(Msg, State) ->
@@ -370,12 +371,14 @@ check_stage_has_all_comm_and_end(Stage, AllParts) ->
   case EndParts == AllPartsSet of
     true -> ok;
     false -> erlang:display("Obtained Stage with missing End part"),
-      erlang:display(["Stage", Stage])
+      erlang:display(["Stage", Stage]),
+      logger:warning("[~p] Obtained Stage with missing End part: ~p", [?MODULE, Stage])
   end,
   case CommParts == AllPartsSet of
     true -> ok;
     false -> erlang:display("Obtained Stage with missing Comm part"),
-      erlang:display(["Stage", Stage])
+      erlang:display(["Stage", Stage]),
+      logger:warning("[~p] Obtained Stage with missing Comm part: ~p", [?MODULE, Stage])
   end,
   ok.
 

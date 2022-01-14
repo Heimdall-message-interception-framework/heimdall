@@ -15,7 +15,8 @@
     timeouts = [] :: [any()], % timeout, see MIL
     nodes = [] :: [pid()], % process_identifier
     crashed = [] :: [pid()], % process_identifier
-    abstract_state = undefined :: undefined | any() % datastructure to hold abstract state
+    abstract_state = undefined :: undefined | any(), % datastructure to hold abstract state
+    concrete_state = undefined :: undefined | any() % datastructure to hold concrete state
 }).
 
 -type history() :: [{#instruction{}, #prog_state{}}].

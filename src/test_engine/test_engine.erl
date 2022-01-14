@@ -13,7 +13,19 @@
     next_id = 0 :: 0 | pos_integer(),
     bootstrap_scheduler = undefined :: atom(),
     scheduler = undefined :: atom(),
-    sut_module :: atom()
+    sut_module :: atom(),
+    persist = false :: boolean()
+}).
+
+% Mnesia table which is needed when we want to persist test runs
+-record(mil_test_runs, {
+    date :: calendar:datetime(),
+    scheduler :: atom(),
+    testcase :: nonempty_string(),
+    num_processes :: pos_integer(),
+    length :: pos_integer(),
+    history :: history(),
+    config :: #{atom => any()}
 }).
 %%% API functions
 
@@ -40,13 +52,41 @@ explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout
 -spec init([atom(), ...]) -> {'ok', #state{}}.
 init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
-init([SUTModule, Scheduler, BootstrapScheduler]) ->
+init([SUTModule, Scheduler, BootstrapScheduler]) when is_atom(BootstrapScheduler)->
+    init([SUTModule, Scheduler, BootstrapScheduler, #{}]);
+init([SUTModule, Scheduler, Config]) when is_map(Config)->
+    init([SUTModule, Scheduler, scheduler_vanilla_fifo, Config]);
+init([SUTModule, Scheduler, BootstrapScheduler, Config]) -> 
+    Persist = case maps:get(persist, Config, false) of
+        false -> false;
+        true ->
+            Dir = case os:getenv("MIL_MNESIA_DIR", undefined) of
+                undefined -> erlang:throw("Persistence requested but MIL_MNESIA_DIR environment variable was not set!");
+                D -> D end,
+            logger:info("[~p] starting up mnesia database in dir ~p.", [?MODULE, Dir]),
+            application:set_env(mnesia, dir, Dir),
+            case mnesia:create_schema([node()]) of
+                ok ->
+                    application:start(mnesia),
+                    mnesia:create_table(mil_test_runs, [{attributes,
+                        record_info(fields, mil_test_runs)}, {disc_copies, [node()]}, {type, set},
+                        {index, [#mil_test_runs.scheduler, #mil_test_runs.testcase]}
+                        ]);
+                {error,{_,{already_exists,_}}} -> application:start(mnesia);
+                Error -> logger:error("[~p] unknown error: ~p", [?MODULE, Error]) end,
+            % wait for table to become ready
+            mnesia:wait_for_tables([mil_test_runs], 10000),
+            Size = mnesia:table_info(mil_test_runs, size),
+            logger:info("[~p] Started mnesia succesfully. Current number of entries: ~p.",
+                [?MODULE, Size]),
+            true end,
     %% start pid_name_table
     ets:new(pid_name_table, [named_table, {read_concurrency, true}, ordered_set, public]),
     {ok,#state{
         bootstrap_scheduler = BootstrapScheduler,
         scheduler = Scheduler,
-        sut_module = SUTModule
+        sut_module = SUTModule,
+        persist = Persist
     }}.
 
 handle_cast(_Msg, State) ->
@@ -131,6 +171,13 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
 
             [{NextInstr, ProgState} | Hist] end,
         History, Steps),
+
+    % persist test run in database if requested
+    case State#state.persist of
+        true ->
+            % write to db
+            store_run(Run, State#state.scheduler, Config);
+        false -> ok end,
     
     % write html file if html output is requested
     case maps:get(html_output, Config, false) of
@@ -182,8 +229,8 @@ collect_state(MIL, SUTModule) ->
     PropValues = maps:from_list(lists:flatmap(fun(P) -> read_property(P) end, Properties)),
 
     % collect abstract state 
-    AbstractState = case SUTModule:abstract_state_mod() of
-        undefined -> undefined;
+    {ConcreteState, AbstractState} = case SUTModule:abstract_state_mod() of
+        undefined -> {undefined, undefined};
         AbstractStateModule -> gen_event:call({global,om}, AbstractStateModule, get_result) end,
 
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
@@ -194,8 +241,25 @@ collect_state(MIL, SUTModule) ->
         nodes = message_interception_layer:get_all_node_pids(MIL),
         crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL)),
         % TODO: support permanent crashes
+        concrete_state = ConcreteState,
         abstract_state = AbstractState
     }.
+
+% stores a test run on disk in an mnesia database
+-spec store_run(history(), atom(), #{atom() => any()}) -> ok.
+-dialyzer({no_return, store_run/3}).
+store_run(Run, Scheduler, Config) -> 
+    F = fun() ->
+        mnesia:write(#mil_test_runs{
+            date = calendar:local_time(),
+            testcase = maps:get(test_name, Config),
+            scheduler = Scheduler,
+            num_processes = map_get(num_processes, Config),
+            length = map_get(run_length, Config),
+            history = Run,
+            config = Config
+        }) end,
+    mnesia:activity(transaction, F).
 
 -spec read_property(atom()) -> [{nonempty_string(), boolean()}].
 read_property(Observer) ->

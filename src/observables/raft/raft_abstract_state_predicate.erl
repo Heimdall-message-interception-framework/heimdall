@@ -58,6 +58,7 @@ init(_) ->
 handle_event({sched,
   #sched_event{what = reg_node, class = ra_server_proc, name = ProcName} = SchedEvent},
     #state{all_participants = AllParts, part_to_state_map = PartStateMap} = State) ->
+  logger:info("[~p] new ra_server_pro ~p registered.", [?MODULE, ProcName]),
 %%    store event in history of events
   State1 = add_to_history(State, {sched, SchedEvent}),
 %%  update all participants and state map
@@ -82,7 +83,7 @@ handle_event(_Event, State) ->
                  (get_length_history, #state{}) -> {ok, integer(), #state{}}.
 handle_call(get_result, #state{} = State) ->
     Stage1 = build_1st_stage(State),   % build log-tree one by one with commit-index
-    check_stage_has_all_comm_and_end(Stage1, State#state.all_participants),
+    check_stage_has_all_comm_and_end(Stage1, State),
     Stage2 = build_2nd_stage(Stage1),
     Stage3 = build_3rd_stage(Stage2),  % collapse entries
     Stage4 = build_4th_stage(Stage3, State),
@@ -129,7 +130,7 @@ handle_ra_log(State = #state{part_to_state_map = PartStateMap}, Part,
   end,
 %%  sanity check for log entries
   case array:size(PartLog1) == Idx of
-    false -> erlang:display("log entry will not be written to next position");
+    false -> logger:warning("log entry will not be written to next position");
     true -> ok
   end,
   PartLog2 = array:set(Idx, {Term, Data}, PartLog1),
@@ -191,22 +192,27 @@ build_1st_stage(#state{part_to_state_map = PartStateMap} = _State) ->
   LogTree.
 
 %% case 1: data is undefined, no children and log empty
--spec add_log_to_log_tree(#log_tree{}, nonempty_list(), participant(), integer()) -> #log_tree{}.
+-spec add_log_to_log_tree(CurrentLogTree :: #log_tree{}, LogToAdd :: [log_entry()], participant(), integer()) -> #log_tree{}.
 add_log_to_log_tree(LogTree =
   #log_tree{data = undefined, children = [], end_parts = EndParts, commit_index_parts = CommIndexParts},
   _LogToAdd = [], Proc, CommitIndex) ->
   case CommitIndex of
     0 -> LogTree#log_tree{end_parts = [Proc | EndParts], commit_index_parts = [Proc | CommIndexParts]};
     _ -> % if not 0, something went wrong
-        erlang:throw("participant with empty log but non-yweo commit-index")
+        erlang:throw("participant with empty log but non-zero commit-index")
   end;
 %% case 2: data is undefined, no children and log not empty
 add_log_to_log_tree(LogTree =
-  #log_tree{data = undefined, children = []},
+  #log_tree{data = undefined, children = [], commit_index_parts = CommitIndexParts},
   LogToAdd, Proc, CommitIndex) ->
   % go over LogToAdd and turn it into log_tree
-  Child = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex),
-  LogTree#log_tree{children = [Child]};
+  Child = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex-1),
+  logger:debug("[~p] converted log of ~p to logtree ~p", [?MODULE, Proc, Child]),
+  CommIndexParts1 = case CommitIndex == 0 of
+                      true -> [Proc | CommitIndexParts];
+                      false -> CommitIndexParts
+                    end,
+  LogTree#log_tree{children = [Child], commit_index_parts = CommIndexParts1};
 %% case 3: log is empty
 add_log_to_log_tree(LogTree =
   #log_tree{end_parts = EndParts, commit_index_parts = CommitIndexParts},
@@ -364,25 +370,29 @@ get_all_proc_info_rec(#abs_log_tree{children = Children, part_info = PartInfo}) 
   lists:append(PartInfo, ChildrenInfo).
 
 %% functions for sanity checks
--spec check_stage_has_all_comm_and_end(#log_tree{}, [any()]) -> 'ok'.
-check_stage_has_all_comm_and_end(Stage, AllParts) ->
+-spec check_stage_has_all_comm_and_end(#log_tree{}, #state{}) -> 'ok'.
+check_stage_has_all_comm_and_end(Stage, State) ->
   {EndParts, CommParts} = compute_endparts_and_commparts(Stage),
-  AllPartsSet = sets:from_list(AllParts),
+  AllPartsSet = sets:from_list(State#state.all_participants),
   case EndParts == AllPartsSet of
     true -> ok;
     false -> erlang:display("Obtained Stage with missing End part"),
       erlang:display(["Stage", Stage]),
-      logger:warning("[~p] Obtained Stage with missing End part: ~p", [?MODULE, Stage])
+      Missing = sets:to_list(sets:subtract(AllPartsSet, EndParts)),
+      logger:warning("[~p] Obtained Stage with missing End part for ~p. Stage: ~p", [?MODULE, Missing, Stage])
   end,
   case CommParts == AllPartsSet of
     true -> ok;
     false -> erlang:display("Obtained Stage with missing Comm part"),
       erlang:display(["Stage", Stage]),
-      logger:warning("[~p] Obtained Stage with missing Comm part: ~p", [?MODULE, Stage])
+      MissingCom = sets:to_list(sets:subtract(AllPartsSet, CommParts)),
+      logger:warning("[~p] Obtained Stage with missing Comm part for ~p. Stage: ~p", [?MODULE, MissingCom, Stage]),
+      logger:debug("[~p] History of events: ~p", [?MODULE, State#state.history_of_events]),
+      logger:debug("[~p] Part to state map is: ~p", [?MODULE, State#state.part_to_state_map])
   end,
   ok.
 
--spec compute_endparts_and_commparts(#log_tree{}) -> {sets:set(_), sets:set(_)}.
+-spec compute_endparts_and_commparts(#log_tree{}) -> {sets:set(participant()), sets:set(participant())}.
 compute_endparts_and_commparts(#log_tree{children = Children, end_parts = EndParts, commit_index_parts = CommParts}) ->
   lists:foldl(
     fun(Child, {EndPartsAcc, CommPartsAcc}) ->

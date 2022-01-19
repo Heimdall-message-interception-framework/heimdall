@@ -320,7 +320,10 @@ build_4th_stage(#log_tree{commit_index_parts = CommIndexParts, children = Childr
                                          end,
                           #per_part_abs_info{
                             role = PartRecord#per_part_state.state,
-                            commit_index = maps:get(Proc, MapProcCommIndex1),
+                            commit_index = case maps:get(Proc, MapProcCommIndex1, undefined) of
+                              undefined -> logger:warning("[~p] proc ~p has undefined commit index. Maybe it was longer than its log and was discarded."),
+                                           undefined;
+                              CommitIndex -> CommitIndex end,
                             term = PartRecord#per_part_state.current_term,
                             voted_for_less = VotedForLess
                           }

@@ -129,8 +129,9 @@ handle_ra_log(State = #state{part_to_state_map = PartStateMap}, Part,
     false -> PartLog
   end,
 %%  sanity check for log entries
-  case array:size(PartLog1) == Idx of
-    false -> logger:warning("log entry will not be written to next position");
+  case array:size(PartLog1) =< Idx of
+    false -> logger:info("[~p, ~p]: writing log entry opens 'hole'; log: ~p; index: ~p",
+                          [?MODULE, ?LINE, array:to_list(PartLog1), Idx]);
     true -> ok
   end,
   PartLog2 = array:set(Idx, {Term, Data}, PartLog1),

@@ -89,13 +89,14 @@ handle_log_request(Proc, #ra_log_obs_event{idx = Idx, trunc = Trunc},
         case ConsidersItselfLeader of
             true -> % check for leader
                 {not ((Idx =< LastIdx) orelse Trunc), State1};
-            false -> % check for follower and issue warning
-                Conjunction = (Idx =< LastIdx) and (not Trunc),
-                case Conjunction of
-                    true -> erlang:display("Idx is smaller than or equal LastIdx but not listed as Truncate"),
-                        erlang:display(["Idx", Idx, "LastIdx", LastIdx, "Trunc", Trunc]);
-                    false -> ok
-                end,
+            _ ->
+%%            false -> % check for follower and issue warning
+%%                Conjunction = (Idx =< LastIdx) and (not Trunc),
+%%                case Conjunction of
+%%                    true -> erlang:display("Idx is smaller than or equal LastIdx but not listed as Truncate"),
+%%                        erlang:display(["Idx", Idx, "LastIdx", LastIdx, "Trunc", Trunc]);
+%%                    false -> ok
+%%                end,
                 {true, State1}
         end,
     {StillSat, State2}.

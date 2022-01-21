@@ -328,7 +328,7 @@ build_4th_stage(#log_tree{commit_index_parts = CommIndexParts, children = Childr
                           #per_part_abs_info{
                             role = PartRecord#per_part_state.state,
                             commit_index = case maps:get(Proc, MapProcCommIndex1, undefined) of
-                              undefined -> logger:warning("[~p] proc ~p has undefined commit index. Maybe it was longer than its log and was discarded.", [?MODULE, Proc]),
+                              undefined -> logger:info("[~p] proc ~p has undefined commit index. Maybe it was longer than its log and was discarded.", [?MODULE, Proc]),
                                            undefined;
                               CommitIndex -> CommitIndex end,
                             term = PartRecord#per_part_state.current_term,
@@ -386,17 +386,16 @@ check_stage_has_all_comm_and_end(Stage, State) ->
   AllPartsSet = sets:from_list(State#state.all_participants),
   case EndParts == AllPartsSet of
     true -> ok;
-    false -> erlang:display("Obtained Stage with missing End part"),
-      erlang:display(["Stage", Stage]),
+    false ->
       Missing = sets:to_list(sets:subtract(AllPartsSet, EndParts)),
-      logger:warning("[~p] Obtained Stage with missing End part for ~p. Stage: ~p", [?MODULE, Missing, Stage])
+      logger:warning("[~p] Obtained Stage with missing End part for ~p. Stage: ~p", [?MODULE, Missing, Stage]),
+      logger:info(["Stage", Stage])
   end,
   case CommParts == AllPartsSet of
     true -> ok;
-    false -> erlang:display("Obtained Stage with missing Comm part"),
-      erlang:display(["Stage", Stage]),
+    false ->
       MissingCom = sets:to_list(sets:subtract(AllPartsSet, CommParts)),
-      logger:warning("[~p] Obtained Stage with missing Comm part for ~p. Stage: ~p", [?MODULE, MissingCom, Stage]),
+      logger:debug("[~p] Obtained Stage with missing Comm part for ~p. Stage: ~p", [?MODULE, MissingCom, Stage]),
       logger:debug("[~p] History of events: ~p", [?MODULE, State#state.history_of_events]),
       logger:debug("[~p] Part to state map is: ~p", [?MODULE, State#state.part_to_state_map])
   end,

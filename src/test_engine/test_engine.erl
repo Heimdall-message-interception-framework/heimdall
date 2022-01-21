@@ -17,18 +17,7 @@
     persist = false :: boolean()
 }).
 
-% Mnesia table which is needed when we want to persist test runs
--record(mil_test_runs, {
-    date :: calendar:datetime(),
-    scheduler :: atom(),
-    testcase :: nonempty_string(),
-    num_processes :: pos_integer(),
-    length :: pos_integer(),
-    history :: history(),
-    config :: #{atom => any()}
-}).
 %%% API functions
-
 %% explore
 % [Inputs]
 % SUTInstructions:: sets:set(instruction()), available API commands of the system under test

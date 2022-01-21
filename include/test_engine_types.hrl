@@ -23,5 +23,16 @@
 
 -type kind_of_instruction() :: sut_instruction | sched_instruction | timeout_instruction | node_connection_instruction.
 
+% Mnesia table which is needed when we want to persist test runs
+-record(mil_test_runs, {
+    date :: calendar:datetime(),
+    scheduler :: atom(),
+    testcase :: nonempty_string(),
+    num_processes :: pos_integer(),
+    length :: pos_integer(),
+    history :: history(),
+    config :: #{atom => any()}
+}).
+
 % -spec choose_instruction(any(), [instruction()], [instruction()], history()) -> instruction()
 % choose_instruction(MIL, SUT_Instructions, Sched_Instructions, History) -> Instruction

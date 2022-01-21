@@ -17,6 +17,7 @@
 -record(log_tree, { % root always has "undefined" data -> option for multiple children on 1st level
   data = undefined :: log_entry() | undefined,
   end_parts = [] :: [any()],
+  voted_parts = [] :: [{any(), any()}],
   commit_index_parts = [] :: [any()],
   children = [] :: [#log_tree{}],
   data_div_children = false :: boolean()
@@ -188,26 +189,27 @@ build_1st_stage(#state{part_to_state_map = PartStateMap} = _State) ->
   InitialLogTree = #log_tree{}, % data = undefined, children = []
   LogTree = maps:fold(fun(Proc, Log, LogTreeAcc) ->
                         CommitIndex = (maps:get(Proc, PartStateMap))#per_part_state.commit_index,
-                        add_log_to_log_tree(LogTreeAcc, Log, Proc, CommitIndex)
+                        VotedFor = (maps:get(Proc, PartStateMap))#per_part_state.voted_for,
+                        add_log_to_log_tree(LogTreeAcc, Log, Proc, CommitIndex, VotedFor)
                       end, InitialLogTree, PartToLogMap),
   LogTree.
 
 %% case 1: data is undefined, no children and log empty
--spec add_log_to_log_tree(CurrentLogTree :: #log_tree{}, LogToAdd :: [log_entry()], participant(), integer()) -> #log_tree{}.
+-spec add_log_to_log_tree(CurrentLogTree :: #log_tree{}, LogToAdd :: [log_entry()], participant(), integer(), participant()) -> #log_tree{}.
 add_log_to_log_tree(LogTree =
-  #log_tree{data = undefined, children = [], end_parts = EndParts, commit_index_parts = CommIndexParts},
-  _LogToAdd = [], Proc, CommitIndex) ->
+  #log_tree{data = undefined, children = [], end_parts = EndParts, voted_parts = VotedParts, commit_index_parts = CommIndexParts},
+  _LogToAdd = [], Proc, CommitIndex, VotedFor) ->
   case CommitIndex of
-    0 -> LogTree#log_tree{end_parts = [Proc | EndParts], commit_index_parts = [Proc | CommIndexParts]};
+    0 -> LogTree#log_tree{end_parts = [Proc | EndParts], voted_parts = [{Proc, VotedFor}, VotedParts], commit_index_parts = [Proc | CommIndexParts]};
     _ -> % if not 0, something went wrong
         erlang:throw("participant with empty log but non-zero commit-index")
   end;
 %% case 2: data is undefined, no children and log not empty
 add_log_to_log_tree(LogTree =
   #log_tree{data = undefined, children = [], commit_index_parts = CommitIndexParts},
-  LogToAdd, Proc, CommitIndex) ->
+  LogToAdd, Proc, CommitIndex, VotedFor) ->
   % go over LogToAdd and turn it into log_tree
-  Child = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex-1),
+  Child = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex-1, VotedFor),
   logger:debug("[~p] converted log of ~p to logtree ~p", [?MODULE, Proc, Child]),
   CommIndexParts1 = case CommitIndex == 0 of
                       true -> [Proc | CommitIndexParts];
@@ -217,23 +219,27 @@ add_log_to_log_tree(LogTree =
 %% case 3: log is empty
 add_log_to_log_tree(LogTree =
   #log_tree{end_parts = EndParts, commit_index_parts = CommitIndexParts},
-  _LogToAdd = [], Proc, CommitIndex) ->
+  _LogToAdd = [], Proc, CommitIndex, VotedFor) ->
   EndParts1 = [Proc | EndParts],
+  VotedParts1 = [{Proc, VotedFor} | EndParts],
   CommIndexParts1 = case CommitIndex == 0 of
                       true -> [Proc | CommitIndexParts];
                       false -> CommitIndexParts
                     end,
-  LogTree#log_tree{end_parts = EndParts1, commit_index_parts = CommIndexParts1};
+  LogTree#log_tree{end_parts = EndParts1, voted_parts = VotedParts1, commit_index_parts = CommIndexParts1};
 %% case 4: log and children not empty so check and recurse
-add_log_to_log_tree(LogTree = #log_tree{children = Children, commit_index_parts = CommitIndexParts}, LogToAdd, Proc, CommitIndex) ->
+add_log_to_log_tree(LogTree = #log_tree{children = Children, commit_index_parts = CommitIndexParts},
+    LogToAdd, Proc, CommitIndex, VotedFor) ->
   %%  attempt to add to some of the children
-  ResultsChildren = lists:map(fun(Child) -> add_log_to_child(LogToAdd, Child, Proc, CommitIndex - 1) end, Children),
+  ResultsChildren = lists:map(fun(Child) ->
+                                add_log_to_child(LogToAdd, Child, Proc, CommitIndex - 1, VotedFor)
+                              end, Children),
   {Results, Children1} = lists:unzip(ResultsChildren),
   Children2 = case lists:member(true, Results) of
     true -> % was inserted so everything fine
       Children1;
     false -> % was not inserted so add child for the log to add
-      LogTreeToAdd = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex),
+      LogTreeToAdd = turn_log_to_log_tree(LogToAdd, Proc, CommitIndex, VotedFor),
       ComparisonFunc = fun(LT1, LT2) -> (max_term_in_log_tree(LT1) =< max_term_in_log_tree(LT2)) end,
       lists:sort(ComparisonFunc, [LogTreeToAdd | Children])
   end,
@@ -243,23 +249,23 @@ add_log_to_log_tree(LogTree = #log_tree{children = Children, commit_index_parts 
                  end,
   LogTree#log_tree{children = Children2, commit_index_parts = CommIndexParts1}.
 
--spec turn_log_to_log_tree(nonempty_list(), participant(), integer()) -> #log_tree{}.
-turn_log_to_log_tree([Entry | Log], Proc, CommitIndex) ->
+-spec turn_log_to_log_tree(nonempty_list(), participant(), integer(), participant()) -> #log_tree{}.
+turn_log_to_log_tree([Entry | Log], Proc, CommitIndex, VotedFor) ->
   LogTree = case CommitIndex == 0 of
               true -> #log_tree{data=Entry, commit_index_parts = [Proc]};
               false -> #log_tree{data=Entry}
             end,
   case Log of
-    [] -> LogTree#log_tree{end_parts = [Proc], children = []};
-    _ -> LogTree#log_tree{children = [turn_log_to_log_tree(Log, Proc, CommitIndex - 1)]}
+    [] -> LogTree#log_tree{end_parts = [Proc], voted_parts = [{Proc, VotedFor}],  children = []};
+    _ -> LogTree#log_tree{children = [turn_log_to_log_tree(Log, Proc, CommitIndex - 1, VotedFor)]}
   end.
 
--spec add_log_to_child(nonempty_list(), #log_tree{}, _, integer()) -> {'false' | 'true', #log_tree{}}.
-add_log_to_child([Entry | RemLogToAdd], LogTree = #log_tree{data = Data}, Proc, CommitIndex) ->
+-spec add_log_to_child(nonempty_list(), #log_tree{}, _, integer(), participant()) -> {'false' | 'true', #log_tree{}}.
+add_log_to_child([Entry | RemLogToAdd], LogTree = #log_tree{data = Data}, Proc, CommitIndex, VotedFor) ->
   DataMatches = Entry == Data,
   LogTree1 = case DataMatches of
     true -> % recursively descend
-      add_log_to_log_tree(LogTree, RemLogToAdd, Proc, CommitIndex);
+      add_log_to_log_tree(LogTree, RemLogToAdd, Proc, CommitIndex, VotedFor);
     false ->
       LogTree
   end,

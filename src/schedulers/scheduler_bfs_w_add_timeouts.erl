@@ -6,8 +6,7 @@
 %%% @end
 %%% Created : 06. Oct 2021 16:26
 %%%-------------------------------------------------------------------
--module(scheduler_random_capped).
-%% this version does only allow to execute the same type of commands as PCT and BFS
+-module(scheduler_bfs_w_add_timeouts).
 -author("fms").
 
 -behaviour(scheduler).
@@ -18,10 +17,16 @@
 
 %% SCHEDULER specific: state and parameters for configuration
 
--record(state, {}).
+-record(state, {
+  queue_commands = queue:new() :: queue:queue(),
+  d_tuple :: [non_neg_integer()],
+  delayed_commands = [] :: [any()], % store pairs of {index, command}
+  num_seen_deviation_points = 0 :: integer()
+}).
 
 -define(ShareSUT_Instructions, 3).
 -define(ShareSchedInstructions, 15).
+%% NOTE: this is the only difference to standard BFS
 -define(ShareTimeouts, 1).
 -define(ShareNodeConnections, 0).
 
@@ -47,29 +52,20 @@ get_kind_of_instruction(_State) ->
 
 %%% SCHEDULER callback implementations
 
-init([_Config]) ->
-  {ok, #state{}}.
+-spec init(list()) -> {ok, #state{}}.
+init([Config]) ->
+  scheduler_bfs:init([Config]).
 
-stop(_State) ->
-  ok.
+stop(State) ->
+  scheduler_bfs:stop(State).
 
--spec update_state(#state{}, list()) -> #state{}.
-update_state(State, _) -> State.
-
--spec produce_sched_instruction(any(), any(), list(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
-  {undefined, State};
-produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit /= [] ->
-  Command = helpers_scheduler:choose_from_list(CommInTransit),
-  Args = helpers_scheduler:get_args_from_command_for_mil(Command),
-  ArgsWithMIL = [MIL | Args],
-  {#instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL}, State}.
+-spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State) ->
+  scheduler_bfs:produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State).
 
 -spec produce_timeout_instruction(any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_timeout_instruction(_MIL, Timeouts, State) when Timeouts == [] ->
-  {undefined, State};
-produce_timeout_instruction(MIL, Timeouts, State) when Timeouts /= [] ->
-  TimeoutToFire = helpers_scheduler:choose_from_list(Timeouts), % we also prioritise the ones in front
-  {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
-  {#instruction{module = message_interception_layer, function = fire_timeout, args = Args}, State}.
+produce_timeout_instruction(MIL, Timeouts, State) ->
+  scheduler_bfs:produce_timeout_instruction(MIL, Timeouts, State).
+
+update_state(State, CommInTransit) ->
+  scheduler_bfs:update_state(State, CommInTransit).

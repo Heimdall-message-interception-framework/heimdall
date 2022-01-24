@@ -7,6 +7,7 @@
 %%% Created : 06. Oct 2021 16:26
 %%%-------------------------------------------------------------------
 -module(scheduler_vanilla_fifo).
+%% This one is only used for initial set-up phases.
 -author("fms").
 
 -behaviour(gen_server).
@@ -37,7 +38,7 @@ init([_Config]) ->
   {ok, #state{}}.
 
 handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _From, State = #state{}) ->
-  #prog_state{commands_in_transit = CommInTransit} = getLastStateOfHistory(History),
+  #prog_state{commands_in_transit = CommInTransit} = helpers_scheduler:get_last_state_of_history(History),
   Result = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit),
   {reply, Result, State};
 handle_call(_Request, _From, State = #state{}) ->
@@ -52,12 +53,6 @@ terminate(_Reason, _State = #state{}) ->
 
 %% internal functions
 
--spec getLastStateOfHistory(history()) -> #prog_state{}.
-getLastStateOfHistory([]) ->
-  #prog_state{};
-getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
-  State.
-
 -spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _) -> #instruction{}.
 get_next_instruction(MIL, _SUTModule, _SchedInstructions, CommInTransit) when CommInTransit == [] ->
 %%  TODO: change this in some way
@@ -65,10 +60,6 @@ get_next_instruction(MIL, _SUTModule, _SchedInstructions, CommInTransit) when Co
 get_next_instruction(MIL, _SUTModule, _SchedInstructions, CommInTransit) when CommInTransit /= [] ->
 %%  schedule next command
   [Command | _Tail] = CommInTransit,
-  Args = get_args_from_command_for_mil(Command),
+  Args = helpers_scheduler:get_args_from_command_for_mil(Command),
   ArgsWithMIL = [MIL | Args],
   #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL}.
-
-get_args_from_command_for_mil(Command) ->
-  {Id, From, To, _Module, _Function, _Args} = Command,
-  [Id, From, To].

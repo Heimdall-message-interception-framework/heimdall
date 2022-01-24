@@ -9,98 +9,64 @@
 -module(scheduler_bfs).
 -author("fms").
 
+-behaviour(scheduler).
+
 -include("test_engine_types.hrl").
+
+-export([get_kind_of_instruction/1, produce_sched_instruction/5, produce_timeout_instruction/3, start/1, init/1, update_state/2, choose_instruction/5, stop/1]).
+
+%% SCHEDULER specific: state and parameters for configuration
+
+-record(state, {
+  queue_commands = queue:new() :: queue:queue(),
+  d_tuple :: [non_neg_integer()],
+  delayed_commands = [] :: [any()], % store pairs of {index, command}
+  num_seen_deviation_points = 0 :: integer()
+}).
 
 -define(ShareSUT_Instructions, 3).
 -define(ShareSchedInstructions, 15).
+-define(ShareTimeouts, 0).
+-define(ShareNodeConnections, 0).
 
--record(state, {
-    queue_commands = queue:new() :: queue:queue(),
-   	d_tuple :: [non_neg_integer()],
-   	delayed_commands = [] :: [any()], % store pairs of {index, command}
-  	num_seen_deviation_points = 0 :: integer()
-}).
+%%% BOILERPLATE for scheduler behaviour
 
--type kind_of_instruction() :: sut_instruction | sched_instruction. % | timeout_instruction | node_connection_instruction.
-
--export([start_link/1, start/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
--export([choose_instruction/5]).
-
-%%% API
--spec start_link(_) -> {'ok', pid()}.
-start_link(Config) ->
-  gen_server:start_link({local, ?MODULE}, ?MODULE, [Config], []).
-
-start(Config) ->
-  gen_server:start({local, ?MODULE}, ?MODULE, [Config], []).
+start(InitialConfig) ->
+  Config = maps:put(sched_name, ?MODULE, InitialConfig),
+  scheduler:start(Config).
 
 -spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
 choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  %io:format("[~p] Choosing Instruction, History is: ~p~n", [?MODULE, History]),
-  gen_server:call(Scheduler, {choose_instruction, MIL, SUTModule, SchedInstructions, History}).
+  scheduler:choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History).
 
-%% gen_server callbacks
+-define(ListKindInstructionsShare, lists:flatten(
+  [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
+    lists:duplicate(?ShareSchedInstructions, sched_instruction),
+    lists:duplicate(?ShareTimeouts, timeout_instruction),
+    lists:duplicate(?ShareNodeConnections, node_connection_instruction)])).
 
+-spec get_kind_of_instruction(#state{}) -> kind_of_instruction().
+get_kind_of_instruction(_State) ->
+  lists:nth(rand:uniform(length(?ListKindInstructionsShare)), ?ListKindInstructionsShare).
+
+%%% SCHEDULER callback implementations
+
+-spec init(list()) -> {ok, #state{}}.
 init([Config]) ->
   NumPossibleDevPoints = maps:get(num_possible_dev_points, Config, undefined),
   SizeDTuple = maps:get(size_d_tuple, Config, undefined),
   case (NumPossibleDevPoints == undefined) or (SizeDTuple == undefined) of
-    true -> erlang:throw("scheduler bfs not properly configured");
-    false -> DTuple = produce_d_tuple(SizeDTuple, NumPossibleDevPoints),
+    true -> logger:warning("[~p] scheduler bfs not properly configured", [?MODULE]);
+    false -> DTuple = helpers_scheduler:produce_d_tuple(SizeDTuple, NumPossibleDevPoints),
             {ok, #state{d_tuple = DTuple}}
   end.
 
-handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _From, State = #state{}) ->
-  #prog_state{commands_in_transit = CommInTransit,
-    timeouts = Timeouts,
-    nodes = Nodes,
-    crashed = Crashed} = getLastStateOfHistory(History),
-%%  first update state
-  State1 = update_state(State, CommInTransit),
-%%  then get next instruction
-  {Instruction, State2} = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed, State1),
-  {reply, Instruction, State2};
-handle_call(_Request, _From, State = #state{}) ->
-  erlang:throw("unhandled call"),
-  {reply, ok, State}.
-
-handle_cast(_Request, State = #state{}) ->
-  {noreply, State}.
-
-terminate(_Reason, _State = #state{}) ->
+stop(_State) ->
   ok.
 
-%% internal functions
-
--spec getLastStateOfHistory(history()) -> #prog_state{}.
-getLastStateOfHistory([]) ->
-  #prog_state{};
-getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
-  State.
-
--spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _, #state{}) -> {#instruction{}, #state{}}.
-get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State) ->
-  KindInstruction = get_kind_of_instruction(),
-    {NextInstruction, State2} =
-      case (CommInTransit == []) or (KindInstruction == sut_instruction) of
-        true -> {produce_sut_instruction(SUTModule), State};
-        false -> produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State)
-      end,
-    case NextInstruction of
-      undefined -> get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, _Nodes, _Crashed, State2);
-      _ -> {NextInstruction, State2}
-    end.
-
--spec produce_sut_instruction(atom()) -> #instruction{}.
-produce_sut_instruction(SUTInstructionModule) ->
-  % choose random abstract instruction
-  Instructions = SUTInstructionModule:get_instructions(),
-  Instr = lists:nth(rand:uniform(length(Instructions)), Instructions),
-  SUTInstructionModule:generate_instruction(Instr).
-
 -spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, _State) when CommInTransit == [] ->
-  undefined;
+produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
+  {undefined, State};
 produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, Timeouts,
     #state{
       queue_commands = QueueCommands,
@@ -116,31 +82,26 @@ produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, Timeouts,
         {found, Index} ->
             DelayedCommands1 = [{Index, NextCommand} | DelayedCommands],
             State2 = State1#state{delayed_commands = DelayedCommands1},
-            % TODO: timeouts here as well
             {undefined, State2};
         notfound ->
-            {get_instruction_from_command(NextCommand, MIL), State1}
+            {helpers_scheduler:get_instruction_from_command(NextCommand, MIL), State1}
       end;
     {empty, _} -> % go for delayed command or timeout
       case DelayedCommands of
-        [] -> {get_timeout_instruction(Timeouts, MIL), State};
+        [] -> {produce_timeout_instruction(Timeouts, MIL, State), State};
         _ -> get_delayed_instruction(DelayedCommands, MIL, State)
       end
   end.
 
+-spec produce_timeout_instruction(any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_timeout_instruction(_MIL, Timeouts, State) when Timeouts == [] ->
+  {undefined, State};
+produce_timeout_instruction(MIL, Timeouts, State) when Timeouts /= [] ->
+  TimeoutToFire = helpers_scheduler:choose_from_list(Timeouts), % we also prioritise the ones in front
+  {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
+  Args = [MIL, Proc, TimerRef],
+  {#instruction{module = message_interception_layer, function = fire_timeout, args = Args}, State}.
 
--spec get_kind_of_instruction() -> kind_of_instruction().
-get_kind_of_instruction() ->
-  SumShares = ?ShareSUT_Instructions + ?ShareSchedInstructions,
-  RandomNumber = rand:uniform() * SumShares,
-  case RandomNumber < ?ShareSUT_Instructions of
-    true -> sut_instruction;
-    false -> sched_instruction
-  end.
-
-get_args_from_command_for_mil(Command) ->
-  {Id, From, To, _Module, _Function, _Args} = Command,
-  [Id, From, To].
 
 -spec update_state(#state{}, [any()]) -> #state{}.
 update_state(#state{queue_commands = QueueCommands, delayed_commands = DelayedCommands} = State,
@@ -166,17 +127,6 @@ in_d_tuple(NumDevPoints, DTuple) ->
     false -> {found, length(DTuple) - LenSuffix} % index from 0
   end.
 
-get_instruction_from_command(Command, MIL) ->
-  Args = get_args_from_command_for_mil(Command),
-  ArgsWithMIL = [MIL | Args],
-  #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL}.
-
-get_timeout_instruction(Timeouts, MIL) when Timeouts /= [] ->
-  TimeoutToFire = choose_from_list(Timeouts), % we also prioritise the ones in front
-  {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
-  #instruction{module = message_interception_layer, function = fire_timeout, args = Args}.
-
 %% also returns state
 get_delayed_instruction(DelayedCommands, MIL, State) when DelayedCommands /= [] ->
 %%  find next delayed command
@@ -191,41 +141,4 @@ get_delayed_instruction(DelayedCommands, MIL, State) when DelayedCommands /= [] 
 %%  update state
   DelayedCommands1 = lists:delete({SmallestIndex, Command}, DelayedCommands),
   State1 = State#state{delayed_commands = DelayedCommands1},
-  {get_instruction_from_command(Command, MIL), State1}.
-
-choose_from_list(List) ->
-  choose_from_list(List, 5).
-choose_from_list(List, Trials) when Trials == 0 ->
-%%  pick first; possible since the list cannot be empty
-  [Element | _] = List,
-  Element;
-choose_from_list(List, Trials) when Trials > 0 ->
-  HelperFunction = fun(X, Acc) ->
-    case Acc of
-      undefined -> RandomNumber = rand:uniform() * 4, % 75% chance to pick first command
-        case RandomNumber < 3 of
-          true -> X;
-          false -> undefined
-        end;
-      Cmd       -> Cmd
-    end
-                   end,
-  MaybeElement = lists:foldl(HelperFunction, undefined, List),
-  case MaybeElement of
-    undefined -> choose_from_list(List, Trials-1);
-    Element -> Element
-  end.
-
-
-produce_d_tuple(SizeDTuple, NumPossibleDevPoints) when SizeDTuple =< NumPossibleDevPoints ->
-%%  idea: produce all possible integers and draw list from them until full
-  AllNumbers = lists:seq(0, NumPossibleDevPoints-1),
-  Steps = lists:seq(0, SizeDTuple-1),
-  HelperFunc = fun(_, {DTuple0, AllNumbers0}) ->
-                  NextElem = lists:nth(rand:uniform(length(AllNumbers0)), AllNumbers0),
-                  AllNumbers1 = lists:delete(NextElem, AllNumbers0),
-                  DTuple1 = [NextElem | DTuple0],
-                  {DTuple1, AllNumbers1}
-               end,
-  {DTuple, _} = lists:foldl(HelperFunc, {[], AllNumbers}, Steps),
-  DTuple.
+  {helpers_scheduler:get_instruction_from_command(Command, MIL), State1}.

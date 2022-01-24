@@ -21,6 +21,7 @@
 
 -type history() :: [{#instruction{}, #prog_state{}}].
 
+-type kind_of_instruction() :: sut_instruction | sched_instruction | timeout_instruction | node_connection_instruction.
 
 % -spec choose_instruction(any(), [instruction()], [instruction()], history()) -> instruction()
 % choose_instruction(MIL, SUT_Instructions, Sched_Instructions, History) -> Instruction

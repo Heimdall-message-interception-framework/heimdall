@@ -269,7 +269,8 @@ collect_state(MIL, SUTModule) ->
 store_run(Run, Scheduler, Config) -> 
     F = fun() ->
         mnesia:write(#mil_test_runs{
-            date = calendar:local_time(),
+            date = erlang:system_time(),
+            testmodule = maps:get(test_module, Config),
             testcase = maps:get(test_name, Config),
             scheduler = Scheduler,
             num_processes = map_get(num_processes, Config),

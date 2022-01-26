@@ -25,8 +25,9 @@
 
 % Mnesia table which is needed when we want to persist test runs
 -record(mil_test_runs, {
-    date :: calendar:datetime(),
+    date :: integer(), % date is saved with erlang:system_time()
     scheduler :: atom(),
+    testmodule :: atom(),
     testcase :: nonempty_string(),
     num_processes :: pos_integer(),
     length :: pos_integer(),

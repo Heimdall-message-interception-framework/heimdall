@@ -201,6 +201,26 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
             end
     end,
 
+    % write dot files for abstract states if requested
+    case maps:get(dot_output, Config, false) of
+        false -> ok;
+        true ->
+            case maps:get(test_name, Config, undefined) of
+                undefined -> erlang:throw("Test name undefined but HTML output requested.");
+                TestName1 ->
+                    logger:info("[~p] requesting dot file generation for abstract states", [?MODULE]),
+                    AbstractStates = lists:map(fun({_, ProgState}) -> ProgState#prog_state.abstract_state end, Run),
+                    lists:map(
+                        fun({AbsStateNum, AbstractState}) ->
+                            Filename1 = io_lib:format("~p_~p_AbsState_~p", [TestName1, RunId, AbsStateNum]),
+                            logger:info("[~p] requesting dot file generation for abstract states in file:", [?MODULE, Filename1]),
+                            dot_output:output_dot(Filename1, AbstractState)
+                        end,
+                        lists:zip(lists:seq(1, length(AbstractStates)), AbstractStates)
+                    )
+            end
+    end,
+
     ok = SUTModule:stop_sut(),
     gen_server:stop(SUTModRef),
 

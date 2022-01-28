@@ -212,8 +212,9 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
                     AbstractStates = lists:map(fun({_, ProgState}) -> ProgState#prog_state.abstract_state end, Run),
                     lists:map(
                         fun({AbsStateNum, AbstractState}) ->
+                            erlang:display(["TestName1", TestName1, "RunId", RunId, "AbsStateNum", AbsStateNum]),
                             Filename1 = io_lib:format("~p_~p_AbsState_~p", [TestName1, RunId, AbsStateNum]),
-                            logger:info("[~p] requesting dot file generation for abstract states in file:", [?MODULE, Filename1]),
+                            logger:info("[~p] requesting dot file generation for abstract states in file: ~p", [?MODULE, Filename1]),
                             dot_output:output_dot(Filename1, AbstractState)
                         end,
                         lists:zip(lists:seq(1, length(AbstractStates)), AbstractStates)

@@ -39,7 +39,7 @@ init([LL, Name, R]) ->
 -spec handle_call({'rco_broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({rco_broadcast, Msg}, _From, State) ->
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
@@ -53,7 +53,7 @@ handle_call({rco_broadcast, Msg}, _From, State) ->
 	% broadcast to everyone
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
@@ -93,7 +93,7 @@ deliver_pending(State, Pending, Vc) ->
                 sets:fold(fun({Q, _, M}, VcA) ->
                              State#state.deliver_to ! {deliver, M},
                             %%% OBS
-                            gen_event:sync_notify({global,om}, {process, #obs_process_event{
+                            gen_event:sync_notify(om, {process, #obs_process_event{
                                 process = self(),
                                 event_type = bc_delivered_event,
                                 event_content = #bc_delivered_event{

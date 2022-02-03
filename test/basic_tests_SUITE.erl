@@ -9,7 +9,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("sched_event.hrl").
 
--define(ObserverManager, {global, om}).
+-define(ObserverManager, om).
 
 -export([all/0,
   mil_naive_scheduler_test/1,
@@ -31,7 +31,7 @@ all() -> [
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
   % create observer manager
-  {ok, _} = gen_event:start({global, om}),
+  {ok, _} = gen_event:start({local,om}),
   Config.
 
 end_per_suite(_Config) ->

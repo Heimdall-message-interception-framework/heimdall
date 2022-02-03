@@ -11,7 +11,7 @@
 
 -include("observer_events.hrl").
 
--define(ObserverManager, {global, om}).
+-define(ObserverManager, om).
 
 %% API
 -export([get_readable_time/0, remove_firstmatch/2, get_message_interception_layer/0, submit_sched_event/1]).

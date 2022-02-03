@@ -2971,10 +2971,10 @@ post_observation_events(PrevState, _PrevData, Result, StateCall) ->
       notify_about_statem_event(Event, statem_transition_event);
     %%
     keep_state_and_data ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
+%%      gen_event:sync_notify(om, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
       ok;
     {keep_state_and_data,_Actions} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
+%%      gen_event:sync_notify(om, {gen_mi_statem, {{keep_state, PrevState}, {keep_data, PrevData}}});
       ok;
     %%
     {repeat_state,NewData} ->
@@ -2985,10 +2985,10 @@ post_observation_events(PrevState, _PrevData, Result, StateCall) ->
       notify_about_statem_event(Event, statem_transition_event);
     %%
     repeat_state_and_data ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
+%%      gen_event:sync_notify(om, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
       ok;
     {repeat_state_and_data,_Actions} ->
-%%      gen_event:sync_notify({global, om}, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
+%%      gen_event:sync_notify(om, {gen_mi_statem, {{repeat_state, PrevState}, {repeat_data, PrevData}}});
       ok;
     %%
     stop ->
@@ -3013,6 +3013,6 @@ post_observation_events(PrevState, _PrevData, Result, StateCall) ->
 
 notify_about_statem_event(Event, EvType) ->
   ProcEvent = #obs_process_event{process = self(), event_type = EvType, event_content = Event},
-  gen_event:sync_notify({global, om}, {process, ProcEvent}).
+  gen_event:sync_notify(om, {process, ProcEvent}).
 
 %% SBO

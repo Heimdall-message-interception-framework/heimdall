@@ -47,7 +47,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 			message = Msg
 		}
 	}},
-    gen_event:sync_notify({global,om}, Event),
+    gen_event:sync_notify(om, Event),
 	%%% SBO
 
 	% deliver locally
@@ -58,7 +58,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 	% broadcast to everyone
 	best_effort_broadcast_paper:broadcast(State#state.beb, {State#state.self, Mid, Msg}),
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
@@ -86,13 +86,13 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 					message = Msg
 				}
 			}},
-			gen_event:sync_notify({global,om}, Event),
+			gen_event:sync_notify(om, Event),
 			%%% SBO
 			NewDelivered = sets:add_element({Sender, Mid}, State#state.local_delivered),
 			% beb-broadcast again
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			%%% OBS
-			gen_event:sync_notify({global,om}, {process, #obs_process_event{
+			gen_event:sync_notify(om, {process, #obs_process_event{
 				process = self(),
 				event_type = bc_broadcast_event,
 				event_content = #bc_broadcast_event{

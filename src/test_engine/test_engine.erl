@@ -105,14 +105,14 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 
     % create observer manager
-    {ok, ObsManager} = gen_event:start({global, om}),
+    {ok, ObsManager} = gen_event:start({local, om}),
 
     % start SUTModule
     {ok, SUTModRef} = SUTModule:start(Config),
 
     % start observers
     Observers = SUTModule:get_observers(),
-    lists:foreach(fun(Obs) -> gen_event:add_sup_handler({global, om}, Obs, [Config]) end,
+    lists:foreach(fun(Obs) -> gen_event:add_sup_handler(om, Obs, [Config]) end,
         Observers),
 
     % bootstrap application w/o scheduler
@@ -218,7 +218,7 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
 
 -spec collect_state(pid(), atom()) -> #prog_state{}.
 collect_state(MIL, SUTModule) ->
-    Observers = gen_event:which_handlers({global,om}),
+    Observers = gen_event:which_handlers(om),
 
     % collect properties
     Props = SUTModule:get_properties(),
@@ -228,7 +228,7 @@ collect_state(MIL, SUTModule) ->
     % collect abstract state 
     {ConcreteState, AbstractState} = case SUTModule:abstract_state_mod() of
         undefined -> {undefined, undefined};
-        AbstractStateModule -> gen_event:call({global,om}, AbstractStateModule, get_result) end,
+        AbstractStateModule -> gen_event:call(om, AbstractStateModule, get_result) end,
 
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
     #prog_state{
@@ -261,7 +261,7 @@ store_run(Run, Scheduler, Config) ->
 
 -spec read_property(atom()) -> [{nonempty_string(), boolean()}].
 read_property(Observer) ->
-    Result = gen_event:call({global,om}, Observer, get_result),
+    Result = gen_event:call(om, Observer, get_result),
     % check if property is a simple boolean or rather a map of sub_property -> boolean
     case Result of
         Bool when (Bool =:= true) or (Bool =:= false) -> [{atom_to_list(Observer), Bool}];

@@ -12,7 +12,7 @@
 -include("raft_observer_events.hrl").
 -include("observer_events.hrl").
 
--define(ObserverManager, {global, om}).
+-define(ObserverManager, om).
 
 %% API
 -export([all/0, init_per_suite/1]).
@@ -36,7 +36,7 @@ all() -> [
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
   % create observer manager
-  {ok, _} = gen_event:start(?ObserverManager),
+  {ok, _} = gen_event:start({local,om}),
   Config.
 
 end_per_suite(Config) ->
@@ -246,7 +246,7 @@ submit_ra_server_state_variable_event(Proc, StateVariable, Value) ->
 
 submit_ra_log_event(Proc, Idx, Term, Trunc, Data) ->
   RaLogEvent = #ra_log_obs_event{idx=Idx, term=Term, trunc=Trunc, data=Data},
-  gen_event:sync_notify({global, om},
+  gen_event:sync_notify(om,
   {process, #obs_process_event{process=Proc, event_type=ra_log, event_content=RaLogEvent}}).
 
 

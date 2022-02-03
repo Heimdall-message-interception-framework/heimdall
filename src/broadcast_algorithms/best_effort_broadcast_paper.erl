@@ -38,7 +38,7 @@ init([LL, Name, R]) ->
 -spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
@@ -56,14 +56,14 @@ handle_call({broadcast, Msg}, _From, State) ->
 			message = Msg
 		}
 	}},
-    gen_event:sync_notify({global,om}, Event),
+    gen_event:sync_notify(om, Event),
 	%%% SBO
 	% broadcast to everyone
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
 	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
@@ -77,7 +77,7 @@ handle_call({broadcast, Msg}, _From, State) ->
 handle_info({deliver, Msg}, State) ->
 	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
+    gen_event:sync_notify(om, {process, #obs_process_event{
 		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{

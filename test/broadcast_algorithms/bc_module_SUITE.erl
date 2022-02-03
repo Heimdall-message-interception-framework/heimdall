@@ -30,7 +30,7 @@ end_per_testcase(_, Config) ->
 test_module(InitialConfig) ->
     % bc_module:bootstrap(),
     % start ObserverManager and MIL
-    {ok, OM} = gen_event:start({global,om}),
+    {ok, OM} = gen_event:start({local,om}),
     {ok, MIL} = message_interception_layer:start(),
     erlang:monitor(process, MIL),
     application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),

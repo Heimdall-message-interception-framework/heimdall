@@ -50,10 +50,10 @@ init([SUTModule, Scheduler, BootstrapScheduler, Config]) ->
         {false, "undef"} -> false;
         {true, "undef"} ->
             % persistence requested but no db was given -> use default dir "_build/Mnesia_DB"
-            setup_db("../../../Mnesia_DB"),
+            mnesia_functions:setup_db(),
             true;
-        {_, Dir} ->
-            setup_db(Dir),
+        {_, _Dir} ->
+            mnesia_functions:setup_db(),
             true end,
     %% start pid_name_table
     ets:new(pid_name_table, [named_table, {read_concurrency, true}, ordered_set, public]),
@@ -91,27 +91,6 @@ terminate(Reason, _State) ->
     ok.
 
 %%% internal functions
-
-% setup mnesia database
--spec setup_db(nonempty_string()) -> ok.
-setup_db(Dir) ->
-    logger:info("[~p] starting up mnesia database in dir ~p.", [?MODULE, Dir]),
-    application:set_env(mnesia, dir, Dir),
-    case mnesia:create_schema([node()]) of
-        ok ->
-            application:start(mnesia),
-            mnesia:create_table(mil_test_runs, [{attributes,
-                record_info(fields, mil_test_runs)}, {disc_copies, [node()]}, {type, set},
-                {index, [#mil_test_runs.scheduler, #mil_test_runs.testcase]}
-                ]);
-        {error,{_,{already_exists,_}}} -> application:start(mnesia);
-        Error -> logger:error("[~p] unknown error: ~p", [?MODULE, Error]) end,
-    % wait for table to become ready
-    mnesia:wait_for_tables([mil_test_runs], 10000),
-    Size = mnesia:table_info(mil_test_runs, size),
-    logger:info("[~p] Started mnesia succesfully. Current number of entries: ~p.",
-        [?MODULE, Size]),
-    ok.
 
 % perform a single exploration run
 -spec explore1(atom(), #{atom() => any()}, [#abstract_instruction{}], integer(), #state{}, integer()) -> history().

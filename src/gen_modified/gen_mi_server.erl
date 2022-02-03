@@ -450,8 +450,7 @@ loop(Parent, Name, State, Mod, hibernate, HibernateAfterTimeout, Debug) ->
 
 loop(Parent, Name, State, Mod, infinity, HibernateAfterTimeout, Debug) ->
 %%  MIL receive
-	MIL = msg_interception_helpers:get_message_interception_layer(),
-	TimerRef = message_interception_layer:enable_timeout(MIL, self(), HibernateAfterTimeout, timeout),
+	TimerRef = message_interception_layer:enable_timeout(self(), HibernateAfterTimeout, timeout),
 	ResultRcv = receive
 								{mil_timeout,TimerRef,timeout} ->
 									loop(Parent, Name, State, Mod, hibernate, HibernateAfterTimeout, Debug);
@@ -460,14 +459,13 @@ loop(Parent, Name, State, Mod, infinity, HibernateAfterTimeout, Debug) ->
 %%								after HibernateAfterTimeout ->
 %%			loop(Parent, Name, State, Mod, hibernate, HibernateAfterTimeout, Debug)
 	end,
-	message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+	message_interception_layer:disable_timeout(self(), TimerRef),
 	ResultRcv;
 %%LIM
 
 loop(Parent, Name, State, Mod, Time, HibernateAfterTimeout, Debug) ->
 %%	MIL receive
-	MIL = msg_interception_helpers:get_message_interception_layer(),
-	TimerRef = message_interception_layer:enable_timeout(MIL, self(), Time, timeout),
+	TimerRef = message_interception_layer:enable_timeout(self(), Time, timeout),
 	Msg = receive
 					{mil_timeout,TimerRef,timeout} ->
 						timeout;
@@ -476,21 +474,21 @@ loop(Parent, Name, State, Mod, Time, HibernateAfterTimeout, Debug) ->
 %%after Time ->
 %%		  timeout
 	  end,
-	message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+	message_interception_layer:disable_timeout(self(), TimerRef),
 %%  LIM
 	decode_msg(Msg, Parent, Name, State, Mod, Time, HibernateAfterTimeout, Debug, false).
 
 wake_hib(Parent, Name, State, Mod, HibernateAfterTimeout, Debug) ->
 %%  MIL receive (removed since no timeout in original code)
 %%	MIL = msg_interception_helpers:get_message_interception_layer(),
-%%	TimerRef = message_interception_layer:enable_timeout(MIL, self(), undefined, timeout),
+%%	TimerRef = message_interception_layer:enable_timeout(self(), undefined, timeout),
 	Msg = receive
 %%					{mil_timeout,TimerRef,timeout} ->
 %%						ok;
 					Input ->
 						Input
 			end,
-%%	message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+%%	message_interception_layer:disable_timeout(self(), TimerRef),
 %%  LIM
 	decode_msg(Msg, Parent, Name, State, Mod, hibernate, HibernateAfterTimeout, Debug, true).
 

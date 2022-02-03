@@ -54,10 +54,9 @@ init_per_testcase(causal_ordering_test, Config) ->
   logger:add_handler(machine_handler, logger_std_h, ConfigMachine),
 
   % create message interception layer
-  {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
-  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+  {ok, _MIL} = message_interception_layer:start(),
+  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
   commands_transfer_helper:start(CTH),
 
   NewConfig = Config ++ [{listen_to, ["bc1_rco", "bc2_rco", "bc3_rco"]}],
@@ -75,15 +74,15 @@ init_per_testcase(TestCase, Config) ->
 
   % create message interception layer
   {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
-  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
   commands_transfer_helper:start(CTH),
   Config.
 
 end_per_testcase(_, Config) ->
-  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-  gen_server:stop(MIL),
+  gen_server:stop(commands_transfer_helper),
+  gen_server:stop(scheduler_naive),
+  gen_server:stop(message_interception_layer),
   gen_event:stop(om),
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),

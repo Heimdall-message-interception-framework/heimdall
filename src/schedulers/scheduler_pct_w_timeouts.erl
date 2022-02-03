@@ -13,7 +13,7 @@
 
 -include("test_engine_types.hrl").
 
--export([get_kind_of_instruction/1, produce_sched_instruction/5, produce_timeout_instruction/3, start/1, init/1, update_state/2, choose_instruction/5, stop/1]).
+-export([get_kind_of_instruction/1, produce_sched_instruction/4, produce_timeout_instruction/2, start/1, init/1, update_state/2, choose_instruction/4, stop/1]).
 
 %% SCHEDULER specific: state and parameters for configuration
 
@@ -37,9 +37,9 @@ start(InitialConfig) ->
   Config = maps:put(sched_name, ?MODULE, InitialConfig),
   scheduler:start(Config).
 
--spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  scheduler:choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History).
+-spec choose_instruction(Scheduler :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, SUTModule, SchedInstructions, History) ->
+  scheduler:choose_instruction(Scheduler, SUTModule, SchedInstructions, History).
 
 -define(ListKindInstructionsShare, lists:flatten(
   [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
@@ -59,13 +59,13 @@ init([Config]) ->
 stop(State) ->
   scheduler_pct:stop(State).
 
--spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State) ->
-  scheduler_pct:produce_sched_instruction(MIL, SchedInstructions, CommInTransit, Timeouts, State).
+-spec produce_sched_instruction(any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(SchedInstructions, CommInTransit, Timeouts, State) ->
+  scheduler_pct:produce_sched_instruction(SchedInstructions, CommInTransit, Timeouts, State).
 
--spec produce_timeout_instruction(any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_timeout_instruction(MIL, Timeouts, State) ->
-  scheduler_pct:produce_timeout_instruction(Timeouts, MIL, State).
+-spec produce_timeout_instruction(any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_timeout_instruction(Timeouts, State) ->
+  scheduler_pct:produce_timeout_instruction(Timeouts, State).
 
 -spec update_state(#state{}, [any()]) -> #state{}.
 update_state(State, CommInTransit) ->

@@ -14,7 +14,7 @@
 -define(INTERVAL, 50).
 
 %% API
--export([start_link/2, start/1]).
+-export([start_link/1, start/1]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
@@ -23,7 +23,6 @@
 -define(SERVER, ?MODULE).
 
 -record(state, {
-  msg_int_layer_id :: pid(),
   scheduler_id :: pid()
 }).
 
@@ -32,10 +31,10 @@
 %%%===================================================================
 
 %% @doc Spawns the server and registers the local name (unique)
--spec(start_link(pid(), pid()) ->
+-spec(start_link(pid()) ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
-start_link(MIL, Scheduler) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL, Scheduler], []).
+start_link(Scheduler) ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [Scheduler], []).
 
 start(ETH) ->
   gen_server:cast(ETH, {start}).
@@ -49,8 +48,8 @@ start(ETH) ->
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term()} | ignore).
-init([MIL, Scheduler]) ->
-  {ok, #state{msg_int_layer_id = MIL, scheduler_id = Scheduler}}.
+init([Scheduler]) ->
+  {ok, #state{scheduler_id = Scheduler}}.
 
 %% @private
 %% @doc Handling call messages
@@ -83,8 +82,8 @@ handle_cast(_Request, State = #state{}) ->
   {noreply, NewState :: #state{}} |
   {noreply, NewState :: #state{}, timeout() | hibernate} |
   {stop, Reason :: term(), NewState :: #state{}}).
-handle_info(trigger_get_events, State = #state{scheduler_id = Scheduler, msg_int_layer_id = MIL}) ->
-  NewCommands = message_interception_layer:get_commands_in_transit(MIL),
+handle_info(trigger_get_events, State = #state{scheduler_id = Scheduler}) ->
+  NewCommands = message_interception_layer:get_commands_in_transit(),
   gen_server:cast(Scheduler, {commands_it, NewCommands}),
   restart_timer(),
   {noreply, State#state{}};

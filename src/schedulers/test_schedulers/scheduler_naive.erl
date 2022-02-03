@@ -8,17 +8,15 @@
 
 -behaviour(gen_server).
 
--export([start/1]).
+-export([start/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 50).
 -define(TIMEOUTINTERVAL, 750).
--define(MIL, State#state.message_interception_layer_id).
 
 -record(state, {
-  message_interception_layer_id = undefined :: pid() | undefined,
   commands_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}],
   timerref_timeouts = undefined :: reference() | undefined
 }).
@@ -34,11 +32,11 @@ send_next_scheduling_instr(Scheduler) ->
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(MIL) ->
-  gen_server:start_link({local, ?SERVER}, ?MODULE, [MIL], []).
+start() ->
+  gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
-init([MIL]) ->
-  {ok, #state{message_interception_layer_id = MIL}}.
+init([]) ->
+  {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
   {reply, ok, State}.
@@ -51,14 +49,11 @@ handle_cast({commands_it, ListCommands}, State = #state{}) ->
   send_next_scheduling_instr(self()), % react to new events with new scheduled events
   {noreply, State#state{commands_in_transit = ListCommands}};
 %%
-handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
-  {noreply, State#state{message_interception_layer_id = MIL}};
-%%
 handle_cast({send_next_sched}, State = #state{}) ->
   Result = next_event_and_state(State),
   case Result of
     {NextState, {ID, From, To, Mod, Func, Args}} ->
-      message_interception_layer:exec_msg_command(?MIL, ID, From, To, Mod, Func, Args),
+      message_interception_layer:exec_msg_command(ID, From, To, Mod, Func, Args),
       TimerRefTimeouts = restart_timeout_timer(State#state.timerref_timeouts),
       {noreply, NextState#state{timerref_timeouts = TimerRefTimeouts}};
     {NextState, {noop, {}}} ->
@@ -72,7 +67,7 @@ handle_info(trigger_send_next, State) ->
 handle_info({timeouts_timeout, TimerRef}, State) ->
   case State#state.timerref_timeouts == TimerRef of
     false -> {noreply, State};
-    true -> poll_and_schedule_timeouts(?MIL),
+    true -> poll_and_schedule_timeouts(),
              {noreply, State}
   end;
 handle_info(_Info, State) ->
@@ -96,8 +91,8 @@ next_event_and_state(State) ->
       {State#state{commands_in_transit = Tail}, {ID,F,T,Mod,Func,Args}}
   end.
 
-poll_and_schedule_timeouts(MIL) ->
-    EnabledTimeouts = message_interception_layer:get_timeouts(MIL),
+poll_and_schedule_timeouts() ->
+    EnabledTimeouts = message_interception_layer:get_timeouts(),
 %%    just pick the first one for now
 %%    FunFilterEnabledTimeouts = fun(_Key, Value) -> orddict:size(Value) > 0 end,
 %%    ProcsWithEnabledTimeouts = orddict:filter(FunFilterEnabledTimeouts, EnabledTimeouts),
@@ -109,7 +104,7 @@ poll_and_schedule_timeouts(MIL) ->
 %%        TimeoutsProcsList = orddict:to_list(TimeoutsProcsOrddict),
 %%        because we filtered for non-empty we do not need to check again
         {TimerRef, _, Proc, _, _, _, _} = lists:nth(length(EnabledTimeouts), EnabledTimeouts),
-        message_interception_layer:fire_timeout(MIL, Proc, TimerRef)
+        message_interception_layer:fire_timeout(Proc, TimerRef)
     end.
 
 restart_timer() ->

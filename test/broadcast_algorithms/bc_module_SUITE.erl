@@ -33,7 +33,6 @@ test_module(InitialConfig) ->
     {ok, OM} = gen_event:start({local,om}),
     {ok, MIL} = message_interception_layer:start(),
     erlang:monitor(process, MIL),
-    application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
     {ok, BCMod} = bc_module:start_link(Conf),

@@ -14,11 +14,11 @@
 -export([start/0, start_link/0, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 %% API for SUT
--export([register_with_name/4, deregister/3, msg_command/6, enable_timeout/4, disable_timeout/3, enable_timeout/5]).
+-export([register_with_name/3, deregister/2, msg_command/5, enable_timeout/3, disable_timeout/2, enable_timeout/4]).
 %% API for scheduling engine
--export([no_op/1, exec_msg_command/4, exec_msg_command/7, duplicate_msg_command/4, alter_msg_command/5, drop_msg_command/4, fire_timeout/3, transient_crash/2, rejoin/2, permanent_crash/2]).
+-export([no_op/0, exec_msg_command/3, exec_msg_command/6, duplicate_msg_command/3, alter_msg_command/4, drop_msg_command/3, fire_timeout/2, transient_crash/1, rejoin/1, permanent_crash/1]).
 %% Getters
--export([get_commands_in_transit/1, get_timeouts/1, get_transient_crashed_nodes/1, get_permanent_crashed_nodes/1, get_name_for_pid/1, get_all_node_pids/1]).
+-export([get_commands_in_transit/0, get_timeouts/0, get_transient_crashed_nodes/0, get_permanent_crashed_nodes/0, get_name_for_pid/1, get_all_node_pids/0]).
 
 -type timerref() :: reference() | false.
 -type mil_timeout() :: any().
@@ -45,118 +45,118 @@
 %% FOR SUT
 
 %% registration of processes
--spec register_with_name(pid(), nonempty_string() | atom(), pid(), _) -> ok.
-register_with_name(MIL, Name, Identifier, Kind) when is_atom(Name) -> % Identifier can be PID or ...
+-spec register_with_name(nonempty_string() | atom(), pid(), _) -> ok.
+register_with_name(Name, Identifier, Kind) when is_atom(Name) -> % Identifier can be PID or ...
   logger:warning("[~p] got registration with atom ~p. Turning into string.", [?MODULE, Name]),
   NameString = atom_to_list(Name),
-  gen_server:call(MIL, {register, {NameString, Identifier, Kind}});
-register_with_name(MIL, Name, Identifier, Kind) when is_list(Name) -> % Identifier can be PID or ...
+  gen_server:call(?MODULE, {register, {NameString, Identifier, Kind}});
+register_with_name(Name, Identifier, Kind) when is_list(Name) -> % Identifier can be PID or ...
   logger:debug("[~p] registering ~p with pid ~p", [?MODULE, Name, Identifier]),
-  Result = gen_server:call(MIL, {register, {Name, Identifier, Kind}}),
+  Result = gen_server:call(?MODULE, {register, {Name, Identifier, Kind}}),
   logger:debug("[~p] table is now: ~p", [?MODULE, ets:tab2list(pid_name_table)]),
   Result.
 %% de-registration of processes
--spec deregister(pid(), nonempty_string(), pid()) -> any().
-deregister(MIL, Name, Identifier) ->
-  gen_server:call(MIL, {deregister, {Name, Identifier}}).
+-spec deregister(nonempty_string(), pid()) -> any().
+deregister(Name, Identifier) ->
+  gen_server:call(?MODULE, {deregister, {Name, Identifier}}).
 
 %% msg_commands
 % -spec msg_command(pid(), pid(), gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
--spec msg_command(pid(), pid(), pid() | gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
-msg_command(MIL, From, {To, _Node}, Module, Fun, Args) ->
+-spec msg_command(pid(), pid() | gen_mi_statem:server_ref(), atom(), atom(), [any()]) -> ok.
+msg_command(From, {To, _Node}, Module, Fun, Args) ->
 %%  TODO: this is a hack currently and does only work with one single nonode@... which is Node
-  msg_command(MIL, From, To, Module, Fun, Args);
-msg_command(MIL, From, To, Module, Fun, Args) ->
-  gen_server:call(MIL, {msg_cmd, {From, To, Module, Fun, Args}}).
+  msg_command(From, To, Module, Fun, Args);
+msg_command(From, To, Module, Fun, Args) ->
+  gen_server:call(?MODULE, {msg_cmd, {From, To, Module, Fun, Args}}).
 
 %% timeouts
--spec enable_timeout(pid(), _, pid(), _) -> timerref().
-enable_timeout(MIL, Time, Dest, Msg) ->
-  enable_timeout(MIL, Time, Dest, Msg, undefined).
+-spec enable_timeout(_, pid(), _) -> timerref().
+enable_timeout(Time, Dest, Msg) ->
+  enable_timeout(Time, Dest, Msg, undefined).
 %%
--spec enable_timeout(pid(), _, pid(), _, _) -> timerref().
-enable_timeout(MIL, Time, Dest, Msg, _Options) ->
+-spec enable_timeout(_, pid(), _, _) -> timerref().
+enable_timeout(Time, Dest, Msg, _Options) ->
 %%  we assume that processes do only send timeouts to themselves and ignore Options
-  TimerRef = gen_server:call(MIL, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
+  TimerRef = gen_server:call(?MODULE, {enable_to, {Time, Dest, Dest, erlang, send, [{mil_timeout, Msg}]}}),
 %%  erlang:display(["enable_to", TimerRef]),
   TimerRef.
 %%
--spec disable_timeout(pid(), pid(), timerref()) -> timerref().
-disable_timeout(MIL, Proc, TimerRef) ->
+-spec disable_timeout(pid(), timerref()) -> timerref().
+disable_timeout(Proc, TimerRef) ->
 %%  TODO: currently, we do not really check if the timeout to disable is actually enabled,
 %% need to rearrange calls to API for this and ensure that disable is closer to enable and iff not fired
 %%  erlang:display(["disable_to", TimerRef]),
-  Result = gen_server:call(MIL, {disable_to, {Proc, TimerRef}}),
+  Result = gen_server:call(?MODULE, {disable_to, {Proc, TimerRef}}),
   Result.
 
 %% FOR SCHEDULING ENGINE
 %%
--spec no_op(_) -> 'ok'.
-no_op(_MIL) ->
+-spec no_op() -> 'ok'.
+no_op() ->
   ok.
 %% deprecated, use the one with 4 parameters
--spec exec_msg_command(pid(), number(), pid(), pid(), _, _, _) -> ok.
-exec_msg_command(MIL, ID, From, To, _Module, _Fun, _Args) ->
-  exec_msg_command(MIL, ID, From, To).
+-spec exec_msg_command(number(), pid(), pid(), _, _, _) -> ok.
+exec_msg_command(ID, From, To, _Module, _Fun, _Args) ->
+  exec_msg_command(ID, From, To).
 %%
--spec exec_msg_command(pid(), number(), pid(), pid()) -> ok.
-exec_msg_command(MIL, ID, From, To) ->
-  gen_server:call(MIL, {exec_msg_cmd, {ID, From, To}}).
+-spec exec_msg_command(number(), pid(), pid()) -> ok.
+exec_msg_command(ID, From, To) ->
+  gen_server:call(?MODULE, {exec_msg_cmd, {ID, From, To}}).
 %%
--spec duplicate_msg_command(pid(), number(), pid(), pid()) -> ok.
-duplicate_msg_command(MIL, ID, From, To) ->
-  gen_server:call(MIL, {duplicate, {ID, From, To}}).
+-spec duplicate_msg_command(number(), pid(), pid()) -> ok.
+duplicate_msg_command(ID, From, To) ->
+  gen_server:call(?MODULE, {duplicate, {ID, From, To}}).
 %%
--spec alter_msg_command(pid(), number(), pid(), pid(), [any()]) -> ok.
-alter_msg_command(MIL, Id, From, To, NewArgs) ->
-  gen_server:call(MIL, {send_altered, {Id, From, To, NewArgs}}).
+-spec alter_msg_command(number(), pid(), pid(), [any()]) -> ok.
+alter_msg_command(Id, From, To, NewArgs) ->
+  gen_server:call(?MODULE, {send_altered, {Id, From, To, NewArgs}}).
 %%
--spec drop_msg_command(pid(), number(), pid(), pid()) -> ok.
-drop_msg_command(MIL, Id, From, To) ->
-  gen_server:call(MIL, {drop, {Id, From, To}}).
+-spec drop_msg_command(number(), pid(), pid()) -> ok.
+drop_msg_command(Id, From, To) ->
+  gen_server:call(?MODULE, {drop, {Id, From, To}}).
 %%
--spec fire_timeout(pid(), atom(), timerref()) -> any().
-fire_timeout(MIL, Proc, TimerRef) ->
-  gen_server:call(MIL, {fire_to, {Proc, TimerRef}}).
+-spec fire_timeout(atom(), timerref()) -> any().
+fire_timeout(Proc, TimerRef) ->
+  gen_server:call(?MODULE, {fire_to, {Proc, TimerRef}}).
 %%
--spec transient_crash(pid(), pid()) -> 'ok'.
-transient_crash(MIL, Name) ->
-  ok = gen_server:call(MIL, {crash_trans, {Name}}).
+-spec transient_crash(pid()) -> 'ok'.
+transient_crash(Name) ->
+  ok = gen_server:call(?MODULE, {crash_trans, {Name}}).
 %%
--spec permanent_crash(pid(), atom()) -> ok.
-permanent_crash(MIL, Name) ->
-  gen_server:call(MIL, {crash_perm, {Name}}).
+-spec permanent_crash(atom()) -> ok.
+permanent_crash(Name) ->
+  gen_server:call(?MODULE, {crash_perm, {Name}}).
 %%
--spec rejoin(pid(), atom()) -> ok.
-rejoin(MIL, Name) ->
-  gen_server:call(MIL, {rejoin, {Name}}).
+-spec rejoin(atom()) -> ok.
+rejoin(Name) ->
+  gen_server:call(?MODULE, {rejoin, {Name}}).
 
 %% GETTER
 %%
--spec get_commands_in_transit(pid()) -> [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}].
-get_commands_in_transit(MIL) ->
-  gen_server:call(MIL, {get_commands}).
+-spec get_commands_in_transit() -> [{ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}].
+get_commands_in_transit() ->
+  gen_server:call(?MODULE, {get_commands}).
 %%
--spec get_timeouts(pid()) -> [{TimerRef::reference(), ID::any(), Proc::any(), Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}].
-get_timeouts(MIL) ->
-  gen_server:call(MIL, {get_timeouts}).
+-spec get_timeouts() -> [{TimerRef::reference(), ID::any(), Proc::any(), Time::any(), Module::atom(), Function::atom(), ListArgs::list(any())}].
+get_timeouts() ->
+  gen_server:call(?MODULE, {get_timeouts}).
 %%
--spec get_all_node_pids(_) -> [{atom(), pid()}].
-get_all_node_pids(MIL) ->
-  gen_server:call(MIL, {get_all_node_pids}).
+-spec get_all_node_pids() -> [{atom(), pid()}].
+get_all_node_pids() ->
+  gen_server:call(?MODULE, {get_all_node_pids}).
 %%
 -spec get_name_for_pid(pid()) -> nonempty_string().
 get_name_for_pid(Pid) ->
   [{_, Name}] = ets:lookup(pid_name_table, Pid),
   Name.
 %%
--spec get_transient_crashed_nodes(pid()) -> sets:set(atom()).
-get_transient_crashed_nodes(MIL) ->
-  gen_server:call(MIL, {get_transient_crashed_nodes}).
+-spec get_transient_crashed_nodes() -> sets:set(atom()).
+get_transient_crashed_nodes() ->
+  gen_server:call(?MODULE, {get_transient_crashed_nodes}).
 %%
--spec get_permanent_crashed_nodes(reference()) -> sets:set(atom()).
-get_permanent_crashed_nodes(MIL) ->
-  gen_server:call(MIL, {get_permanent_crashed_nodes}).
+-spec get_permanent_crashed_nodes() -> sets:set(atom()).
+get_permanent_crashed_nodes() ->
+  gen_server:call(?MODULE, {get_permanent_crashed_nodes}).
 
 
 %%%===================================================================
@@ -166,11 +166,11 @@ get_permanent_crashed_nodes(MIL) ->
 -spec(start() ->
   {ok, Pid :: pid()} | ignore | {error, Reason :: term()}).
 start() ->
-  gen_server:start({global,mil}, ?MODULE, [], []).
+  gen_server:start({local, ?MODULE}, ?MODULE, [], []).
 
 -spec start_link() -> 'ignore' | {'error', _} | {'ok', pid() | {pid(), reference()}}.
 start_link() ->
-  gen_server:start_link(?MODULE, [], []).
+  gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 -spec(init(Args :: term()) ->
   {ok, State :: #state{}} | {ok, State :: #state{}, timeout() | hibernate} |
@@ -434,7 +434,7 @@ handle_info(_Info, State = #state{}) ->
 
 -spec terminate(_, #state{}) -> 'ok'.
 terminate(Reason, _State = #state{}) ->
-  io:format("[MIL] Terminating. Reason: ~p~n", [Reason]),
+  io:format("[?MODULE] Terminating. Reason: ~p~n", [Reason]),
   ok.
 
 -spec code_change(_, #state{}, _) -> {'ok', #state{}}.

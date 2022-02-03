@@ -41,9 +41,7 @@ handle_cast({new_events, ListNewMessages}, State = #state{}) ->
   MsgUpdatedState = State#state{messages_in_transit = UpdatedMessages},
   {NextState, {KindEvent, ActualEvent}} = next_event_and_state(MsgUpdatedState),
   gen_server:cast(State#state.message_interception_layer_id, {KindEvent, ActualEvent}),
-  {noreply, NextState};
-handle_cast({register_message_interception_layer, MIL}, State = #state{}) ->
-  {noreply, State#state{message_interception_layer_id = MIL}}.
+  {noreply, NextState}.
 
 handle_info(_Info, State = #state{}) ->
   {noreply, State}.

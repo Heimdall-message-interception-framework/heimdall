@@ -9,13 +9,12 @@
 
 -behaviour(gen_server).
 
--export([start/1, start/2, register_msg_int_layer/2]).
+-export([start/1, start/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
 -define(SERVER, ?MODULE).
 -define(INTERVAL, 200).
--define(MIL, State#state.message_interception_layer_id).
 
 -record(state, {
     events_to_match = [], % currently list of sched_events for simplicity
@@ -25,16 +24,12 @@
 %%    messages_in_transit = [] :: [{ID::any(), From::pid(), To::pid(), Msg::any()}], % needed for backup scheduler
     commands_in_transit = [] :: [{ID::number(), From::pid(), To::pid(), Msg::any()}],
     backup_scheduler :: pid(),
-    message_interception_layer_id :: pid() | undefined,
     registered_nodes_pid = orddict:new() :: orddict:orddict(Name::atom(), pid())
 }).
 
 %%%===================================================================
 %%% For External Use
 %%%===================================================================
-
-register_msg_int_layer(Scheduler, NewMIL) ->
-  gen_server:cast(Scheduler, {register_message_interception_layer, NewMIL}).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
@@ -103,9 +98,6 @@ handle_cast({new_events, NewCommands}, State = #state{}) ->
         encountered_unmatchable_event = NewEncounteredUnmatchable}}
   end;
 %%
-handle_cast({register_message_interception_layer, NewMIL}, State = #state{}) ->
-  {noreply, State#state{message_interception_layer_id = NewMIL}};
-%%
 handle_cast({try_next}, State = #state{}) ->
 %%  TODO: currently, next signal for try_next a bit redundant
   case queue:out(State#state.events_to_replay) of
@@ -113,7 +105,7 @@ handle_cast({try_next}, State = #state{}) ->
     {{value, NextEvent}, TempEventsToReplay} ->
       NewRegisteredNodesPid = case NextEvent#sched_event.what of
                                 reg_node ->
-                                  {ok, Pid} = (NextEvent#sched_event.class):start(NextEvent#sched_event.name, ?MIL),
+                                  {ok, Pid} = (NextEvent#sched_event.class):start(NextEvent#sched_event.name),
                                   orddict:store(NextEvent#sched_event.name, Pid, State#state.registered_nodes_pid);
                                 _ -> State#state.registered_nodes_pid
                               end,
@@ -122,10 +114,10 @@ handle_cast({try_next}, State = #state{}) ->
           true ->
             {ok, MatchedID} = orddict:find(NextEvent#sched_event.id, State#state.enabled_events),
             case NextEvent#sched_event.what of
-              exec_msg_cmd -> cast_cmd_and_notify(?MIL, NextEvent);
-              snd_altr -> cast_cmd_and_notify(?MIL, NextEvent);
-              drop_msg -> cast_cmd_and_notify(?MIL, NextEvent);
-              duplicat -> cast_cmd_and_notify(?MIL, NextEvent);
+              exec_msg_cmd -> cast_cmd_and_notify(NextEvent);
+              snd_altr -> cast_cmd_and_notify(NextEvent);
+              drop_msg -> cast_cmd_and_notify(NextEvent);
+              duplicat -> cast_cmd_and_notify(NextEvent);
               _ -> throw("replay_schedule:130: How can this happen?")
             end,
             {found, _, TempMessagesInTransit} = msg_interception_helpers:remove_firstmatch(
@@ -144,22 +136,22 @@ handle_cast({try_next}, State = #state{}) ->
           reg_node ->
 %%            this one has already been started but needs to be registered
             {ok, PidNew} = orddict:find(NextEvent#sched_event.name, NewRegisteredNodesPid),
-            cast_cmd_and_notify(?MIL, NextEvent, PidNew),
+            cast_cmd_and_notify(NextEvent, PidNew),
             true;
 %%          reg_clnt ->
-%%            cast_cmd_and_notify(?MIL, {register_client, {client1}}),
+%%            cast_cmd_and_notify({register_client, {client1}}),
 %%            true;
 %%          clnt_req ->
-%%            cast_cmd_and_notify(?MIL, {client_req, {NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg}}),
+%%            cast_cmd_and_notify({client_req, {NextEvent#sched_event.from, NextEvent#sched_event.to, NextEvent#sched_event.mesg}}),
 %%            true;
           trns_crs ->
-            cast_cmd_and_notify(?MIL, NextEvent),
+            cast_cmd_and_notify(NextEvent),
             true;
           rejoin ->
-            cast_cmd_and_notify(?MIL, NextEvent),
+            cast_cmd_and_notify(NextEvent),
             true;
           perm_crs ->
-            cast_cmd_and_notify(?MIL, NextEvent),
+            cast_cmd_and_notify(NextEvent),
             true;
           _ -> false
         end,
@@ -181,7 +173,7 @@ handle_cast({try_next}, State = #state{}) ->
 %%
 handle_cast({start_backup_scheduler}, State = #state{}) ->
 %%  for now, we assume that a scheduler only needs the currently enabled events and no info about the past
-%%  TODO: send messages_in_transit, register MIL and start it
+%%  TODO: send messages_in_transit
   {noreply, State}.
 
 
@@ -198,11 +190,11 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 %%% Internal functions
 %%%===================================================================
 
-cast_cmd_and_notify(MIL, NextEvent, PidNew) ->
-  message_interception_layer:register_with_name(MIL, NextEvent#sched_event.name, PidNew, NextEvent#sched_event.class),
+cast_cmd_and_notify(NextEvent, PidNew) ->
+  message_interception_layer:register_with_name(NextEvent#sched_event.name, PidNew, NextEvent#sched_event.class),
   notify().
 
-cast_cmd_and_notify(MIL, NextEvent) ->
+cast_cmd_and_notify(NextEvent) ->
 %%  TODO: call the respective methods here!
   ID = NextEvent#sched_event.id,
   From = NextEvent#sched_event.from,
@@ -213,23 +205,23 @@ cast_cmd_and_notify(MIL, NextEvent) ->
   Name = NextEvent#sched_event.name,
   case NextEvent#sched_event.what of
       exec_msg_cmd ->
-        message_interception_layer:exec_msg_command(MIL, ID, From, To, Module, Func, Args);
+        message_interception_layer:exec_msg_command(ID, From, To, Module, Func, Args);
 %%    TODO: add timeout behaviour
       enable_to -> ok;
       enable_to_crsh -> ok;
       disable_to -> ok;
       duplicat ->
-        message_interception_layer:duplicate_msg_command(MIL, ID, From, To);
+        message_interception_layer:duplicate_msg_command(ID, From, To);
       snd_altr ->
-        message_interception_layer:alter_msg_command(MIL, ID, From, To, Args);
+        message_interception_layer:alter_msg_command(ID, From, To, Args);
       drop_msg ->
-        message_interception_layer:drop_msg_command(MIL, ID, From, To);
+        message_interception_layer:drop_msg_command(ID, From, To);
       trns_crs ->
-        message_interception_layer:transient_crash(MIL, Name);
+        message_interception_layer:transient_crash(Name);
       rejoin ->
-        message_interception_layer:rejoin(MIL, Name);
+        message_interception_layer:rejoin(Name);
       perm_crs ->
-        message_interception_layer:permanent_crash(MIL, Name)
+        message_interception_layer:permanent_crash(Name)
   end,
   notify().
 

@@ -212,13 +212,12 @@ do_call(Process, Label, Request, infinity)
     %% will wait for either a reply or a down message which corresponds to
     %% the process being terminated (as opposed to 'noconnection')...
     %%  MIL
-    MIL = msg_interception_helpers:get_message_interception_layer(),
-    message_interception_layer:msg_command(MIL, self(), Process, erlang, send,
+    message_interception_layer:msg_command(self(), Process, erlang, send,
                                                     [Process, {Label, {self(), Mref}, Request}]),
 %%      Process ! {Label, {self(), Mref}, Request}, % MIL REM 1 removed for MIL
       %%  LIM
 %%  MIL receive (no timeout before)
-%%  TimerRef = message_interception_layer:enable_timeout(MIL, self(), MsgRef),
+%%  TimerRef = message_interception_layer:enable_timeout(self(), MsgRef),
       ResultRcv = receive
                   {Mref, Reply} ->
                       erlang:demonitor(Mref, [flush]),
@@ -228,7 +227,7 @@ do_call(Process, Label, Request, infinity)
 %%                  {mil_timeout, MsgRef, _} ->
 %%                      erlang:display("received timeout")
       end,
-%%      message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+%%      message_interception_layer:disable_timeout(self(), TimerRef),
       ResultRcv;
 %% LIM
 
@@ -244,13 +243,12 @@ do_call(Process, Label, Request, Timeout) when is_atom(Process) =:= false ->
     %% monitored connection, and not trigger a new auto-connect.
     %%
     %%  MIL
-    MIL = msg_interception_helpers:get_message_interception_layer(),
-    message_interception_layer:msg_command(MIL, self(), Process, erlang, send,
+    message_interception_layer:msg_command(self(), Process, erlang, send,
                                                   [Process, {Label, {self(), Tag}, Request}, [noconnect]]),
 %%    erlang:send(Process, {Label, {self(), Tag}, Request}, [noconnect]), % MIL REM 2 removed for MIL
     %%  LIM
 %%  MIL receive
-    TimerRef = message_interception_layer:enable_timeout(MIL, Timeout, self(), timeout),
+    TimerRef = message_interception_layer:enable_timeout(Timeout, self(), timeout),
     ResultRcv = receive
                   {[alias | Mref], Reply} ->
                     erlang:demonitor(Mref, [flush]),
@@ -278,7 +276,7 @@ do_call(Process, Label, Request, Timeout) when is_atom(Process) =:= false ->
 %%            end
     end,
 %%    erlang:display("gen_mi 286 we never reach here", "ResultRcv", ResultRcv), TODO why does this cause trouble?
-    message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+    message_interception_layer:disable_timeout(self(), TimerRef),
     ResultRcv.
 %%  LIM
 
@@ -322,8 +320,7 @@ do_send_request(Process, Label, Request) ->
         {reply, Reply::term()} | 'timeout' | {error, {term(), server_ref()}}.
 wait_response(Mref, Timeout) when is_reference(Mref) ->
 %%  MIL receive
-    MIL = msg_interception_helpers:get_message_interception_layer(),
-    TimerRef = message_interception_layer:enable_timeout(MIL, Timeout, self(), timeout),
+    TimerRef = message_interception_layer:enable_timeout(Timeout, self(), timeout),
     ResultRcv = receive
                   {[alias|Mref], Reply} ->
                       erlang:demonitor(Mref, [flush]),
@@ -336,7 +333,7 @@ wait_response(Mref, Timeout) when is_reference(Mref) ->
 %%    after Timeout ->
 %%            timeout
     end,
-    message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+    message_interception_layer:disable_timeout(self(), TimerRef),
     ResultRcv.
 %% LIM
 
@@ -344,8 +341,7 @@ wait_response(Mref, Timeout) when is_reference(Mref) ->
         {reply, Reply::term()} | 'timeout' | {error, {term(), server_ref()}}.
 receive_response(Mref, Timeout) when is_reference(Mref) ->
 %%  MIL receive
-  MIL = msg_interception_helpers:get_message_interception_layer(),
-  TimerRef = message_interception_layer:enable_timeout(MIL, Timeout, self(), timeout),
+  TimerRef = message_interception_layer:enable_timeout(Timeout, self(), timeout),
   ResultRcv = receive
                 {[alias|Mref], Reply} ->
                   erlang:demonitor(Mref, [flush]),
@@ -369,7 +365,7 @@ receive_response(Mref, Timeout) when is_reference(Mref) ->
 %%                        timeout
 %%                end
     end,
-    message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+    message_interception_layer:disable_timeout(self(), TimerRef),
     ResultRcv.
 
 -spec check_response(RequestId::term(), Key::request_id()) ->

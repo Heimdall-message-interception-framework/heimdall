@@ -51,15 +51,14 @@ end_per_suite(_Config) ->
 init_per_testcase(TestCase, Config) ->
 %%  start MIL and Scheduler
   {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
-  application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
+  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
 %%  start observer and state machine
   {ok, _Observer} = observer_timeouts:start(),
   {ok, StatemPID} = statem_w_timeouts_mi:start(),
-  message_interception_layer:register_with_name(MIL, statem_w_timeouts_mi, StatemPID, statem_w_timeouts_mi),
+  message_interception_layer:register_with_name(statem_w_timeouts_mi, StatemPID, statem_w_timeouts_mi),
      % we use the module as name here in case it is used in calls or casts
-  message_interception_layer:register_with_name(MIL, client, self(), test_client),
+  message_interception_layer:register_with_name(client, self(), test_client),
 %%  start the CTH
   commands_transfer_helper:start(CTH),
 %%  set logs
@@ -72,8 +71,7 @@ init_per_testcase(TestCase, Config) ->
 
 
 end_per_testcase(_, Config) ->
-  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-  gen_server:stop(MIL),
+  gen_server:stop(message_interception_layer),
   logger:remove_handler(readable_handler),
   logger:remove_handler(machine_handler),
   Config.

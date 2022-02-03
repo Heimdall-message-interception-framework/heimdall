@@ -12,7 +12,7 @@
 -include("test_engine_types.hrl").
 
 %% API
--export([get_args_from_command_for_mil/1, produce_d_tuple/2, choose_from_list/1, get_last_state_of_history/1, get_instruction_from_command/2, in_d_tuple/2, insert_elem_at_position_in_list/3, update_nth_list/3, change_elem_in_list/3]).
+-export([get_args_from_command_for_mil/1, produce_d_tuple/2, choose_from_list/1, get_last_state_of_history/1, get_instruction_from_command/1, in_d_tuple/2, insert_elem_at_position_in_list/3, update_nth_list/3, change_elem_in_list/3]).
 
 get_args_from_command_for_mil({Id, From, To, _Module, _Function, _Args}) ->
   [Id, From, To].
@@ -62,10 +62,9 @@ choose_from_list(List, Trials) when Trials > 0 ->
     Element -> Element
   end.
 
-get_instruction_from_command(Command, MIL) ->
+get_instruction_from_command(Command) ->
   Args = helpers_scheduler:get_args_from_command_for_mil(Command),
-  ArgsWithMIL = [MIL | Args],
-  #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL}.
+  #instruction{module = message_interception_layer, function = exec_msg_command, args = Args}.
 
 -spec in_d_tuple(non_neg_integer(), list(non_neg_integer())) -> {found, non_neg_integer()} | notfound.
 in_d_tuple(NumDevPoints, DTuple) ->

@@ -8,26 +8,22 @@
 
 -behaviour(gen_server).
 
--export([start/2]).
+-export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
 
--define(SERVER, ?MODULE).
--define(MIL, State#state.message_interception_layer_id).
-
 -record(state, {
-  message_interception_layer_id :: pid()
 }).
 
 %%%===================================================================
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Name, MessageCollector) ->
-  gen_server:start_link({local, Name}, ?MODULE, [MessageCollector], []).
+start(Name) ->
+  gen_server:start_link({local, Name}, ?MODULE, [], []).
 
-init([MessageCollector]) ->
-  {ok, #state{message_interception_layer_id = MessageCollector}}.
+init([]) ->
+  {ok, #state{}}.
 
 handle_call(_Request, _From, State = #state{}) ->
   {reply, ok, State}.
@@ -56,9 +52,9 @@ code_change(_OldVsn, State = #state{}, _Extra) ->
 send_N_messages_with_interval(State, N, To, Interval) ->
   if
     N > 0 ->
-      message_interception_layer:msg_command(?MIL, self(), To, gen_server, cast, [To, {message, N}]),
+      message_interception_layer:msg_command(self(), To, gen_server, cast, [To, {message, N}]),
       timer:sleep(Interval),
       send_N_messages_with_interval(State, N-1, To, Interval);
     N == 0 ->
-      message_interception_layer:msg_command(?MIL, self(), To, gen_server, cast, [To, {message, N}])
+      message_interception_layer:msg_command(self(), To, gen_server, cast, [To, {message, N}])
   end.

@@ -637,10 +637,9 @@ reply(From, Reply) ->
 %%    erlang:display(["mi_stm 640 REPLY req", "self", self(), "From", From, "Reply", Reply]),
   %%  MIL
 %%  decided not to do this layer deeper since there are three cases then
-    MIL = msg_interception_helpers:get_message_interception_layer(),
 %%  TODO: check why we need this look into tuple
     {FromWoRef, _} = From,
-    message_interception_layer:msg_command(MIL, self(), FromWoRef, gen_mi, reply, [From, Reply]),
+    message_interception_layer:msg_command(self(), FromWoRef, gen_mi, reply, [From, Reply]),
 %%    gen_mi:reply(From, Reply). % removed for MIL
     ok. % added this is the only return value of this function
   %%  LIM
@@ -725,11 +724,10 @@ call_clean(ServerRef, Request, Timeout, T) ->
 %%    erlang:display(["CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
     Ref = make_ref(),
     Self = self(),
-    MIL = msg_interception_helpers:get_message_interception_layer(),
     _Pid = spawn(
             fun () ->
 %%              MIL
-              message_interception_layer:register_with_name(MIL,
+              message_interception_layer:register_with_name(
                        string:concat("gen_mi_statem_", pid_to_list(self())), self(), gen_mi_statem),
 %%              erlang:display(["SPAWN of CALL true clean req", "self", self(), "ServerRef", ServerRef, "Request", Request]),
               Response = try gen_mi:call(
@@ -739,14 +737,14 @@ call_clean(ServerRef, Request, Timeout, T) ->
                        catch Class:Reason:Stacktrace ->
                           {Ref,Class,Reason,Stacktrace}
                        end,
-              message_interception_layer:msg_command(MIL, self(), Self, erlang, send, [Self, Response]),
+              message_interception_layer:msg_command(self(), Self, erlang, send, [Self, Response]),
               Response % return value?
 %%              Self ! Response % removed for MIL
 %%              LIM; before the Response was inlined in the send operation
             end),
 %%  MIL: removed monitoring since the process dies early,
 %%      Mref = monitor(process, Pid),
-      TimerRef = message_interception_layer:enable_timeout(MIL, Timeout, self(), timeout),
+      TimerRef = message_interception_layer:enable_timeout(Timeout, self(), timeout),
       ResultRcv = receive
                     {Ref,Result} ->
           %%              demonitor(Mref, [flush]),
@@ -769,7 +767,7 @@ call_clean(ServerRef, Request, Timeout, T) ->
 %%                      erlang:display("received timeout") % not handled before
                         ok
       end,
-      message_interception_layer:disable_timeout(MIL, self(), TimerRef),
+      message_interception_layer:disable_timeout(self(), TimerRef),
       ResultRcv.
 %%      LIM
 
@@ -782,8 +780,7 @@ replies([]) ->
 %% Might actually not send the message in case of caught exception
 send(Proc, Msg) ->
   %%  MIL
-    MIL = msg_interception_helpers:get_message_interception_layer(),
-    message_interception_layer:msg_command(MIL, self(), Proc, erlang, send, [Proc, Msg]),
+    message_interception_layer:msg_command(self(), Proc, erlang, send, [Proc, Msg]),
 %%  removed for MIL but
 %%    try erlang:send(Proc, Msg)
 %%    catch
@@ -2158,9 +2155,8 @@ loop_timeouts_start(
         _ ->
             %% (Re)start the timer
 %%          MIL
-            MIL = msg_interception_helpers:get_message_interception_layer(),
             TimerRef =
-              message_interception_layer:enable_timeout(MIL, Time, self(), TimeoutType, TimeoutOpts),
+              message_interception_layer:enable_timeout(Time, self(), TimeoutType, TimeoutOpts),
 %%          LIM
             loop_timeouts_register(
               P, Debug, S,
@@ -2854,8 +2850,7 @@ listify(Item) ->
    cancel_timer(TimerRef),
 %% MIL TIMEOUT case with one parameter only which is called after handling other parameters
 %%   case erlang:cancel_timer(TimerRef) of
-   MIL = msg_interception_helpers:get_message_interception_layer(),
-   case message_interception_layer:disable_timeout(MIL, self(), TimerRef) of
+   case message_interception_layer:disable_timeout(self(), TimerRef) of
        false ->
            %% No timer found and we have not seen the timeout message
            receive

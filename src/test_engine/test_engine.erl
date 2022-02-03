@@ -102,7 +102,6 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     {ok, MIL} = message_interception_layer:start(),
     ets:insert(pid_name_table, {MIL, "MIL"}),
     erlang:monitor(process, MIL),
-    application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
 
     % create observer manager
     {ok, ObsManager} = gen_event:start({local, om}),
@@ -118,12 +117,12 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     % bootstrap application w/o scheduler
     SUTModule:bootstrap_wo_scheduler(),
 
-    InitialHistory = [{#instruction{module=test_engine, function=init, args=[]}, collect_state(MIL, SUTModule)}],
+    InitialHistory = [{#instruction{module=test_engine, function=init, args=[]}, collect_state(SUTModule)}],
 
     % bootstrap application w/ scheduler if necessary
     History = case SUTModule:needs_bootstrap_w_scheduler() of
         true -> {ok, BootstrapScheduler} = (State#state.bootstrap_scheduler):start(Config),
-                CurrHistory = bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, InitialHistory, MIL, MILInstructions),
+                CurrHistory = bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, InitialHistory, MILInstructions),
                 gen_server:stop(BootstrapScheduler),
                 CurrHistory;
         false -> InitialHistory
@@ -138,12 +137,12 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     % per step: choose instruction, execute and collect result
     Run = lists:foldl(fun(_Step, Hist) ->
             % ask scheduler for next concrete instruction
-            NextInstr = (State#state.scheduler):choose_instruction(Scheduler, MIL, SUTModule, MILInstructions, Hist),
+            NextInstr = (State#state.scheduler):choose_instruction(Scheduler, SUTModule, MILInstructions, Hist),
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
-            ok = run_instruction(NextInstr, MIL, State),
+            ok = run_instruction(NextInstr, State),
             % give program a little time to react
             timer:sleep(500),
-            ProgState = collect_state(MIL, SUTModule),
+            ProgState = collect_state(SUTModule),
 
             [{NextInstr, ProgState} | Hist] end,
         History, Steps),
@@ -200,24 +199,24 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     % return run
     Run.
 
--spec run_instruction(#instruction{}, pid(), #state{}) -> ok.
-run_instruction(#instruction{module = Module, function = Function, args = Args}, MIL, _State) ->
+-spec run_instruction(#instruction{}, #state{}) -> ok.
+run_instruction(#instruction{module = Module, function = Function, args = Args}, _State) ->
 %%    only spawn new processes for instructions which are not executed by MIL
     case Module == message_interception_layer of
         true -> apply(Module, Function, Args);
         false ->
             _Pid = spawn(fun() ->
                 Name = string:concat("run_instr_proc_", integer_to_list(erlang:unique_integer([positive]))),
-                message_interception_layer:register_with_name(MIL, Name, self(), run_instr_proc),
+                message_interception_layer:register_with_name(Name, self(), run_instr_proc),
                 apply(Module, Function, Args),
 %%        TODO send result back
-                message_interception_layer:deregister(MIL, Name, self())
+                message_interception_layer:deregister(Name, self())
                          end)
     end,
     ok.
 
--spec collect_state(pid(), atom()) -> #prog_state{}.
-collect_state(MIL, SUTModule) ->
+-spec collect_state(atom()) -> #prog_state{}.
+collect_state(SUTModule) ->
     Observers = gen_event:which_handlers(om),
 
     % collect properties
@@ -233,10 +232,10 @@ collect_state(MIL, SUTModule) ->
     % collect MIL Stuff: commands in transit, timeouts, nodes, crashed
     #prog_state{
         properties = PropValues,
-        commands_in_transit = message_interception_layer:get_commands_in_transit(MIL),
-        timeouts = message_interception_layer:get_timeouts(MIL),
-        nodes = message_interception_layer:get_all_node_pids(MIL),
-        crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes(MIL)),
+        commands_in_transit = message_interception_layer:get_commands_in_transit(),
+        timeouts = message_interception_layer:get_timeouts(),
+        nodes = message_interception_layer:get_all_node_pids(),
+        crashed = sets:to_list(message_interception_layer:get_transient_crashed_nodes()),
         % TODO: support permanent crashes
         concrete_state = ConcreteState,
         abstract_state = AbstractState
@@ -270,18 +269,18 @@ read_property(Observer) ->
     end.
 
 %% does the bootstrapping with the according scheduler and returns initial part of history
--spec bootstrap_w_scheduler(#state{}, atom(), atom(), history(), pid(), [atom()]) -> history().
-bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MIL, MILInstructions) ->
+-spec bootstrap_w_scheduler(#state{}, atom(), atom(), history(), [atom()]) -> history().
+bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MILInstructions) ->
 %%    idea:
 %% - let SUTModule start the bootstrapping part which is needs instructions to be scheduled
 %%    in a process which notifies the TestEngine with result
 %% - in parallel, let TestEngine run the scheduled instructions and wait for notification
     ReplyRef = SUTModule:bootstrap_w_scheduler(self()),
     % per step: choose instruction, execute and collect result
-    bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions).
+    bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, SUTModule, MILInstructions).
 
--spec bootstrap_w_scheduler_loop(_, history(), #state{}, atom(), pid(), atom(), [atom()]) -> history().
-bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SUTModule, MILInstructions) ->
+-spec bootstrap_w_scheduler_loop(_, history(), #state{}, atom(), atom(), [atom()]) -> history().
+bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, SUTModule, MILInstructions) ->
     receive
         {ReplyRef, _Result} ->
 %%            TODO: gen_event with Result after bootstrap with scheduler
@@ -289,12 +288,12 @@ bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, MIL, SU
             History
         after 0 ->
             % ask scheduler for next concrete instruction
-            NextInstr = (State#state.bootstrap_scheduler):choose_instruction(BootstrapScheduler, MIL, SUTModule, MILInstructions, History),
+            NextInstr = (State#state.bootstrap_scheduler):choose_instruction(BootstrapScheduler, SUTModule, MILInstructions, History),
             % io:format("[~p] running istruction: ~p~n", [?MODULE, NextInstr]),
-            ok = run_instruction(NextInstr, MIL, State),
+            ok = run_instruction(NextInstr, State),
             % io:format("[~p] commands in transit: ~p~n", [?MODULE, CIT]),
-            ProgState = collect_state(MIL, SUTModule),
+            ProgState = collect_state(SUTModule),
             History1 = [{NextInstr, ProgState} | History],
-            bootstrap_w_scheduler_loop(ReplyRef, History1, State, BootstrapScheduler, MIL, SUTModule, MILInstructions)
+            bootstrap_w_scheduler_loop(ReplyRef, History1, State, BootstrapScheduler, SUTModule, MILInstructions)
     end.
 

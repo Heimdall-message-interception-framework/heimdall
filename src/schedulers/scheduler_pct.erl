@@ -13,7 +13,7 @@
 
 -include("test_engine_types.hrl").
 
--export([get_kind_of_instruction/1, produce_sched_instruction/5, produce_timeout_instruction/3, start/1, init/1, update_state/2, choose_instruction/5, stop/1]).
+-export([get_kind_of_instruction/1, produce_sched_instruction/4, produce_timeout_instruction/2, start/1, init/1, update_state/2, choose_instruction/4, stop/1]).
 
 %% SCHEDULER specific: state and parameters for configuration
 
@@ -37,9 +37,9 @@ start(InitialConfig) ->
   Config = maps:put(sched_name, ?MODULE, InitialConfig),
   scheduler:start(Config).
 
--spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  scheduler:choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History).
+-spec choose_instruction(Scheduler :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, SUTModule, SchedInstructions, History) ->
+  scheduler:choose_instruction(Scheduler, SUTModule, SchedInstructions, History).
 
 -define(ListKindInstructionsShare, lists:flatten(
   [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
@@ -72,28 +72,28 @@ init([Config]) ->
 stop(#state{online_chain_covering = OCC}) ->
   gen_server:stop(OCC).
 
--spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
+-spec produce_sched_instruction(any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
   {undefined, State};
-produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts,
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts,
     #state{
       online_chain_covering = OCC,
       chain_key_prios = ChainKeyPrios
     } = State) ->
-  CmdID = get_next_from_chains(ChainKeyPrios, OCC, MIL),
+  CmdID = get_next_from_chains(ChainKeyPrios, OCC),
   case  lists:filter(fun({ID, _, _, _, _, _}) -> ID == CmdID end, CommInTransit) of
     [{_, From, To, _, _, _}] ->
-      ArgsWithMIL = [MIL, CmdID, From, To],
-      Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL},
+      Args = [CmdID, From, To],
+      Instruction = #instruction{module = message_interception_layer, function = exec_msg_command, args = Args},
       {Instruction, State};
     SomethingElse -> logger:warning(["found this for command:", SomethingElse]),
       logger:warning("did find this for ID in commands in transit: ~p")
   end.
 
--spec get_next_from_chains([integer()], any(), any()) -> {map(), #instruction{}}.
-get_next_from_chains(ChainKeyPrios, OCC, MIL) ->
+-spec get_next_from_chains([integer()], any()) -> {map(), #instruction{}}.
+get_next_from_chains(ChainKeyPrios, OCC) ->
   Prios = lists:reverse(ChainKeyPrios),
-  recursively_get_next_from_chains(Prios, OCC, MIL).
+  recursively_get_next_from_chains(Prios, OCC).
 
 -spec update_state(#state{}, [any()]) -> #state{}.
 update_state(#state{
@@ -145,7 +145,7 @@ insert_chain_key_at_random_position(ChainKeysPrios, ChainKey, DTuple) ->
         helpers_scheduler:insert_elem_at_position_in_list(Position + length(DTuple), ChainKey, ChainKeysPrios)
     end.
 
-recursively_get_next_from_chains(Prios, OCC, MIL) ->
+recursively_get_next_from_chains(Prios, OCC) ->
 %%  Prios have been reversed before calling
   case Prios of
 %%    [] ->
@@ -153,15 +153,15 @@ recursively_get_next_from_chains(Prios, OCC, MIL) ->
 %%      erlang:display(["IDsInChains", IDsInChains]),
 %%      erlang:throw("ran out of IDs in OCC even though there are commands in transit");
     [no_chain | RemPrios] ->
-      recursively_get_next_from_chains(RemPrios, OCC, MIL);
+      recursively_get_next_from_chains(RemPrios, OCC);
     [ChainKeyMaxPrio | RemPrios] ->
       case online_chain_covering:get_first(OCC, ChainKeyMaxPrio) of
         empty -> % this chain was empty (for now)
-          recursively_get_next_from_chains(RemPrios, OCC, MIL);
+          recursively_get_next_from_chains(RemPrios, OCC);
         {found, ID} -> ID % return ID and scheduler retrieves From and To
       end
   end.
 
 %% will never be called since share for timeouts is 0 but needs to exist for callback implementation
-produce_timeout_instruction(_MIL, _Timeouts, State) ->
+produce_timeout_instruction(_Timeouts, State) ->
   {undefined, State}.

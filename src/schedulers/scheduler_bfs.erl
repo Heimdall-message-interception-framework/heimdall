@@ -13,7 +13,7 @@
 
 -include("test_engine_types.hrl").
 
--export([get_kind_of_instruction/1, produce_sched_instruction/5, produce_timeout_instruction/3, start/1, init/1, update_state/2, choose_instruction/5, stop/1]).
+-export([get_kind_of_instruction/1, produce_sched_instruction/4, produce_timeout_instruction/2, start/1, init/1, update_state/2, choose_instruction/4, stop/1]).
 
 %% SCHEDULER specific: state and parameters for configuration
 
@@ -35,9 +35,9 @@ start(InitialConfig) ->
   Config = maps:put(sched_name, ?MODULE, InitialConfig),
   scheduler:start(Config).
 
--spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  scheduler:choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History).
+-spec choose_instruction(Scheduler :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, SUTModule, SchedInstructions, History) ->
+  scheduler:choose_instruction(Scheduler, SUTModule, SchedInstructions, History).
 
 -define(ListKindInstructionsShare, lists:flatten(
   [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
@@ -64,10 +64,10 @@ init([Config]) ->
 stop(_State) ->
   ok.
 
--spec produce_sched_instruction(any(), any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
+-spec produce_sched_instruction(any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
   {undefined, State};
-produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, Timeouts,
+produce_sched_instruction(_SchedInstructions, _CommInTransit, Timeouts,
     #state{
       queue_commands = QueueCommands,
       delayed_commands = DelayedCommands,
@@ -84,22 +84,22 @@ produce_sched_instruction(MIL, _SchedInstructions, _CommInTransit, Timeouts,
             State2 = State1#state{delayed_commands = DelayedCommands1},
             {undefined, State2};
         notfound ->
-            {helpers_scheduler:get_instruction_from_command(NextCommand, MIL), State1}
+            {helpers_scheduler:get_instruction_from_command(NextCommand), State1}
       end;
     {empty, _} -> % go for delayed command or timeout
       case DelayedCommands of
-        [] -> {produce_timeout_instruction(Timeouts, MIL, State), State};
-        _ -> get_delayed_instruction(DelayedCommands, MIL, State)
+        [] -> {produce_timeout_instruction(Timeouts, State), State};
+        _ -> get_delayed_instruction(DelayedCommands, State)
       end
   end.
 
--spec produce_timeout_instruction(any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_timeout_instruction(_MIL, Timeouts, State) when Timeouts == [] ->
+-spec produce_timeout_instruction(list(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_timeout_instruction(Timeouts, State) when Timeouts == [] ->
   {undefined, State};
-produce_timeout_instruction(MIL, Timeouts, State) when Timeouts /= [] ->
+produce_timeout_instruction(Timeouts, State) when Timeouts /= [] ->
   TimeoutToFire = helpers_scheduler:choose_from_list(Timeouts), % we also prioritise the ones in front
   {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
+  Args = [Proc, TimerRef],
   {#instruction{module = message_interception_layer, function = fire_timeout, args = Args}, State}.
 
 
@@ -128,7 +128,7 @@ in_d_tuple(NumDevPoints, DTuple) ->
   end.
 
 %% also returns state
-get_delayed_instruction(DelayedCommands, MIL, State) when DelayedCommands /= [] ->
+get_delayed_instruction(DelayedCommands, State) when DelayedCommands /= [] ->
 %%  find next delayed command
   {Indices, _} = lists:unzip(DelayedCommands),
   SmallestIndex = lists:min(Indices),
@@ -141,4 +141,4 @@ get_delayed_instruction(DelayedCommands, MIL, State) when DelayedCommands /= [] 
 %%  update state
   DelayedCommands1 = lists:delete({SmallestIndex, Command}, DelayedCommands),
   State1 = State#state{delayed_commands = DelayedCommands1},
-  {helpers_scheduler:get_instruction_from_command(Command, MIL), State1}.
+  {helpers_scheduler:get_instruction_from_command(Command), State1}.

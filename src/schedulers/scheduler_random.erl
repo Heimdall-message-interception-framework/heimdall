@@ -13,7 +13,7 @@
 
 -include("test_engine_types.hrl").
 
--export([get_kind_of_instruction/1, produce_sched_instruction/5, produce_timeout_instruction/3, start/1, init/1, update_state/2, choose_instruction/5, stop/1, produce_node_connection_instruction/4]).
+-export([get_kind_of_instruction/1, produce_sched_instruction/4, produce_timeout_instruction/2, start/1, init/1, update_state/2, choose_instruction/4, stop/1, produce_node_connection_instruction/3]).
 
 %% SCHEDULER specific: state and parameters for configuration
 
@@ -35,9 +35,9 @@ start(InitialConfig) ->
   Config = maps:put(sched_name, ?MODULE, InitialConfig),
   scheduler:start(Config).
 
--spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  scheduler:choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History).
+-spec choose_instruction(Scheduler :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, SUTModule, SchedInstructions, History) ->
+  scheduler:choose_instruction(Scheduler, SUTModule, SchedInstructions, History).
 
 -define(ListKindInstructionsShare, lists:flatten(
   [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
@@ -57,64 +57,61 @@ init([_Config]) ->
 stop(_State) ->
   ok.
 
--spec produce_sched_instruction(any(), any(), any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
+-spec produce_sched_instruction(any(), any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
   {undefined, State};
-produce_sched_instruction(MIL, _SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit /= [] ->
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit /= [] ->
 %%  first decide which action to take
   KindSchedInstruction = get_kind_of_sched_instruction(),
   Instruction = case KindSchedInstruction of
     execute ->
       Command = helpers_scheduler:choose_from_list(CommInTransit),
       Args = helpers_scheduler:get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL};
+      #instruction{module = message_interception_layer, function = exec_msg_command, args = Args};
     duplicate ->  % always choose the first command
       [Command | _] = CommInTransit,
       Args = helpers_scheduler:get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = duplicate_msg_command, args = ArgsWithMIL};
+      #instruction{module = message_interception_layer, function = duplicate_msg_command, args = Args};
     drop -> % always choose the first command
       [Command  | _] = CommInTransit,
       Args = helpers_scheduler:get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = drop_msg_command, args = ArgsWithMIL}
+      #instruction{module = message_interception_layer, function = drop_msg_command, args = Args}
   end,
   {Instruction, State}.
 
--spec produce_timeout_instruction(any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_timeout_instruction(_MIL, Timeouts, State) when Timeouts == [] ->
+-spec produce_timeout_instruction(any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_timeout_instruction(Timeouts, State) when Timeouts == [] ->
   {undefined, State};
-produce_timeout_instruction(MIL, Timeouts, State) when Timeouts /= [] ->
+produce_timeout_instruction(Timeouts, State) when Timeouts /= [] ->
   TimeoutToFire = helpers_scheduler:choose_from_list(Timeouts), % we also prioritise the ones in front
   {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
+  Args = [Proc, TimerRef],
   {#instruction{module = message_interception_layer, function = fire_timeout, args = Args}, State}.
 
--spec produce_node_connection_instruction(any(), any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
-produce_node_connection_instruction(MIL, Nodes, Crashed, State) ->
+-spec produce_node_connection_instruction(any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_node_connection_instruction(Nodes, Crashed, State) ->
   Instruction = case Crashed of
-    [] -> produce_crash_instruction(MIL, Nodes);
+    [] -> produce_crash_instruction(Nodes);
     _ -> case rand:uniform() * 2 < 1 of
-           true -> produce_crash_instruction(MIL, Nodes);
-           false -> produce_rejoin_instruction(MIL, Crashed)
+           true -> produce_crash_instruction(Nodes);
+           false -> produce_rejoin_instruction(Crashed)
          end
   end,
   {Instruction, State}.
 
-produce_crash_instruction(MIL, Nodes) ->
+produce_crash_instruction(Nodes) ->
 %%  currently, we do not distinguish between transient and permanent crash
   NumberOfNodes = length(Nodes),
   NumberOfNodeToCrash = trunc(rand:uniform() * NumberOfNodes) + 1,
   NodeToCrash = lists:nth(NumberOfNodeToCrash, Nodes),
-  Args = [MIL, NodeToCrash],
+  Args = [NodeToCrash],
   #instruction{module = message_interception_layer, function = transient_crash, args = Args}.
 
-produce_rejoin_instruction(MIL, Crashed) ->
+produce_rejoin_instruction(Crashed) ->
   NumberOfCrashedNodes = length(Crashed),
   NumberOfNodeToRejoin = trunc(rand:uniform() * NumberOfCrashedNodes) + 1,
   NodeToRejoin = lists:nth(NumberOfNodeToRejoin, Crashed),
-  Args = [MIL, NodeToRejoin],
+  Args = [NodeToRejoin],
   #instruction{module = message_interception_layer, function = rejoin, args = Args}.
 
 -spec get_kind_of_sched_instruction() -> kind_of_sched_instruction().

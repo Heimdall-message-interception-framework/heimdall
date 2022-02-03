@@ -7,8 +7,9 @@
 setup_db() ->
     Dir = case {os:getenv("MIL_MNESIA_DIR", "undef"), application:get_env(mnesia, dir, "undef")} of
         {"undef", "undef"} -> application:get_env(mnesia, dir, "undef");
-        {D, _} -> D;
-        {"undef", D} -> D end,
+        {D, "undef"} -> D;
+        {"undef", D} -> D;
+        {D1, _D2} -> D1 end,
     logger:info("[~p] starting mnesia database in dir ~p.", [?MODULE, Dir]),
     application:set_env(mnesia, dir, Dir),
     % try to set up a schema containing only this node

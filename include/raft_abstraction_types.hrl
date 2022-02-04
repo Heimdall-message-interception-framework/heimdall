@@ -31,3 +31,9 @@ receive_snapshot | await_condition | terminating_leader | terminating_follower.
     current_term = 0 :: integer(),
     voted_for = undefined :: participant() | undefined
 }).
+
+% Mnesia table to store hashes of abstract and concrete log trees
+-record(tree_hashes, {
+    hash :: integer(),
+    tree :: #log_tree{} | #abs_log_tree{}
+}).

@@ -36,7 +36,7 @@ setup_db() ->
             [_Name, Host] = string:split(atom_to_list(node()), "@"),
             MasterAtom = list_to_atom("master@"++Host),
             application:start(mnesia),
-            mnesia:change_config(extra_db_nodes, [MasterAtom]);
+            {ok, [MasterAtom]} = mnesia:change_config(extra_db_nodes, [MasterAtom]);
         {D, "undef"} -> start_local_db(D);
         {"undef", D} -> start_local_db(D);
         {D1, _D2} -> start_local_db(D1) end,

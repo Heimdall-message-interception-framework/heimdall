@@ -27,7 +27,7 @@ To run test nodes, we can start them - as usual - with the `rebar3 ct command`. 
 For example, in the `ra-kv-store` repo, we can do the following:
 
 ```shell
- scheduler=test_fifo_scheduler PERSIST=true NUM_RUNS=3 NUM_PROCESSES=5 RUN_LENGTH=200 SIZE_D=5 rebar3 ct --sname worker_$scheduler\_$NUM_PROCESSES\_$SIZE_D --suite=test/ra-kv-store_module_SUITE.erl --case=$scheduler
+$ scheduler=test_fifo_scheduler PERSIST=true NUM_RUNS=3 NUM_PROCESSES=5 RUN_LENGTH=200 SIZE_D=5 rebar3 ct --sname worker_$scheduler\_$NUM_PROCESSES\_$SIZE_D --suite=test/ra-kv-store_module_SUITE.erl --case=$scheduler
 ```
 
 `--sname`in the above command gives this test node a unique name based on the test config.

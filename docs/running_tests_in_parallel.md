@@ -12,7 +12,7 @@ Start an erlang shell in `sched_msg_interception_erlang`(this repo):
 $ rebar3 shell --start-clean
 ```
 
-shellOn the erlang shell:
+On the erlang shell:
 
 ```shell
 1> mnesia_functions:start_master("PATH/TO/MNESIA/DIR").

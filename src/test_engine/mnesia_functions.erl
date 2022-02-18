@@ -4,7 +4,7 @@
 -include("raft_abstraction_types.hrl").
 -export([setup_db/0, start_master/1]).
 
-% used to start an MNESIA master node
+% @doc Used to start an mnesia master node.
 start_master(Mnesia_Dir) ->
     net_kernel:start([master, shortnames]),
     [Name, Host] = string:split(atom_to_list(node()), "@"),
@@ -28,6 +28,8 @@ start_master(Mnesia_Dir) ->
         Error -> logger:error("[~p] unknown error: ~p", [?MODULE, Error]) end,
     mnesia:wait_for_tables([mil_test_runs], 10000).
 
+%% @doc Sets up the mnesia database that is needed to store test runs.
+%% If the MIL_MNESIA_DIR env variable is set or an mnesia dir is set manually, the database is started on this node. Otherwise we assume that an mnesia node called "master" is already running.
 -spec setup_db() -> ok.
 setup_db() ->
     case {os:getenv("MIL_MNESIA_DIR", "undef"), application:get_env(mnesia, dir, "undef")} of
@@ -47,6 +49,7 @@ setup_db() ->
         [?MODULE, Size]),
     ok.
 
+%% @doc Used to start a local mnesia database in case no master node is running.
 start_local_db(Dir) ->
     logger:info("[~p] starting mnesia database in dir ~p.", [?MODULE, Dir]),
     application:set_env(mnesia, dir, Dir),

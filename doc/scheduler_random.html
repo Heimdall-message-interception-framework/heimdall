@@ -1,0 +1,120 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module scheduler_random</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module scheduler_random</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>.
+<p>Copyright © (C) 2021, &lt;COMPANY&gt;</p>
+
+<p><b>Behaviours:</b> <a href="scheduler.html"><tt>scheduler</tt></a>.</p>
+<p><b>Authors:</b> fms.</p>
+
+<h2><a name="description">Description</a></h2>
+  
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-kind_of_sched_instruction">kind_of_sched_instruction()</a></h3>
+<p><tt>kind_of_sched_instruction() = execute | duplicate | drop</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#choose_instruction-4">choose_instruction/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_kind_of_instruction-1">get_kind_of_instruction/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_kind_of_sched_instruction-0">get_kind_of_sched_instruction/0*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_crash_instruction-1">produce_crash_instruction/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_node_connection_instruction-3">produce_node_connection_instruction/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_rejoin_instruction-1">produce_rejoin_instruction/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_sched_instruction-4">produce_sched_instruction/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_timeout_instruction-2">produce_timeout_instruction/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start-1">start/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#stop-1">stop/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#update_state-2">update_state/2</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="choose_instruction-4">choose_instruction/4</a></h3>
+<div class="spec">
+<p><tt>choose_instruction(Scheduler::pid(), SUTModule::atom(), SchedInstructions::[#abstract_instruction{}], History::<a href="#type-history">history()</a>) -&gt; #instruction{}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_kind_of_instruction-1">get_kind_of_instruction/1</a></h3>
+<div class="spec">
+<p><tt>get_kind_of_instruction(State::#state{}) -&gt; <a href="#type-kind_of_instruction">kind_of_instruction()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_kind_of_sched_instruction-0">get_kind_of_sched_instruction/0 *</a></h3>
+<div class="spec">
+<p><tt>get_kind_of_sched_instruction() -&gt; <a href="#type-kind_of_sched_instruction">kind_of_sched_instruction()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="init-1">init/1</a></h3>
+<div class="spec">
+<p><tt>init(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_crash_instruction-1">produce_crash_instruction/1 *</a></h3>
+<div class="spec">
+<p><tt>produce_crash_instruction(Nodes) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_node_connection_instruction-3">produce_node_connection_instruction/3</a></h3>
+<div class="spec">
+<p><tt>produce_node_connection_instruction(Nodes::any(), Crashed::any(), State::#state{}) -&gt; {#instruction{} | undefined, #state{}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_rejoin_instruction-1">produce_rejoin_instruction/1 *</a></h3>
+<div class="spec">
+<p><tt>produce_rejoin_instruction(Crashed) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_sched_instruction-4">produce_sched_instruction/4</a></h3>
+<div class="spec">
+<p><tt>produce_sched_instruction(SchedInstructions::any(), CommInTransit::any(), Timeouts::list(), State::#state{}) -&gt; {#instruction{} | undefined, #state{}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_timeout_instruction-2">produce_timeout_instruction/2</a></h3>
+<div class="spec">
+<p><tt>produce_timeout_instruction(Timeouts::any(), State::#state{}) -&gt; {#instruction{} | undefined, #state{}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="start-1">start/1</a></h3>
+<div class="spec">
+<p><tt>start(InitialConfig) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="stop-1">stop/1</a></h3>
+<div class="spec">
+<p><tt>stop(State) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="update_state-2">update_state/2</a></h3>
+<div class="spec">
+<p><tt>update_state(State, CommInTransit) -&gt; any()</tt></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

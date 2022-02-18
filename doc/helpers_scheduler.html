@@ -1,0 +1,106 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module helpers_scheduler</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module helpers_scheduler</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>.
+<p>Copyright © (C) 2022, &lt;COMPANY&gt;</p>
+
+<p><b>Authors:</b> fms.</p>
+
+<h2><a name="description">Description</a></h2>
+  
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#change_elem_in_list-3">change_elem_in_list/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#choose_from_list-1">choose_from_list/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#choose_from_list-2">choose_from_list/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_args_from_command_for_mil-1">get_args_from_command_for_mil/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_instruction_from_command-1">get_instruction_from_command/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_last_state_of_history-1">get_last_state_of_history/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#in_d_tuple-2">in_d_tuple/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#insert_elem_at_position_in_list-3">insert_elem_at_position_in_list/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#produce_d_tuple-2">produce_d_tuple/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#rec_insert_elem_at_position_in_list-4">rec_insert_elem_at_position_in_list/4*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#update_nth_list-3">update_nth_list/3</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="change_elem_in_list-3">change_elem_in_list/3</a></h3>
+<div class="spec">
+<p><tt>change_elem_in_list(Old, Rest, New) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="choose_from_list-1">choose_from_list/1</a></h3>
+<div class="spec">
+<p><tt>choose_from_list(List) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="choose_from_list-2">choose_from_list/2 *</a></h3>
+<div class="spec">
+<p><tt>choose_from_list(List, Trials) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_args_from_command_for_mil-1">get_args_from_command_for_mil/1</a></h3>
+<div class="spec">
+<p><tt>get_args_from_command_for_mil(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_instruction_from_command-1">get_instruction_from_command/1</a></h3>
+<div class="spec">
+<p><tt>get_instruction_from_command(Command) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_last_state_of_history-1">get_last_state_of_history/1</a></h3>
+<div class="spec">
+<p><tt>get_last_state_of_history(Tail::<a href="#type-history">history()</a>) -&gt; #prog_state{}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="in_d_tuple-2">in_d_tuple/2</a></h3>
+<div class="spec">
+<p><tt>in_d_tuple(NumDevPoints::non_neg_integer(), DTuple::[non_neg_integer()]) -&gt; {found, non_neg_integer()} | notfound</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="insert_elem_at_position_in_list-3">insert_elem_at_position_in_list/3</a></h3>
+<div class="spec">
+<p><tt>insert_elem_at_position_in_list(Position, Elem, List) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="produce_d_tuple-2">produce_d_tuple/2</a></h3>
+<div class="spec">
+<p><tt>produce_d_tuple(SizeDTuple, NumPossibleDevPoints) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="rec_insert_elem_at_position_in_list-4">rec_insert_elem_at_position_in_list/4 *</a></h3>
+<div class="spec">
+<p><tt>rec_insert_elem_at_position_in_list(Position, Elem, RevPrefix, Suffix) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="update_nth_list-3">update_nth_list/3</a></h3>
+<div class="spec">
+<p><tt>update_nth_list(I, Rest, New) -&gt; any()</tt></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

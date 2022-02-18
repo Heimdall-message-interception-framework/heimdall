@@ -1,3 +1,6 @@
+% @doc The test engine functions as a root module controlling the message interception layer, scheduler and system under test.
+% @author Julian Haas <jhaas@mpi-sws.org>
+% @author Felix Stutz <fstutz@mpi-sws.org>
 -module(test_engine).
 -behaviour(gen_server).
 -include("test_engine_types.hrl").
@@ -5,8 +8,7 @@
 
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, explore/6, explore/7]).
 
-% a run consists of an id and a history
--type run() :: {pos_integer() | 0, history()}.
+-type run() :: {pos_integer() | 0, history()}. %% a test-run, consisting of an id and a history
 
 -record(state, {
     runs = []:: [run()],
@@ -17,27 +19,36 @@
     persist = false :: boolean()
 }).
 
+%%%%%%%%%%
 %%% API functions
+%%%%%%%%%%
+
 %% explore
-% [Inputs]
-% SUTInstructions:: sets:set(instruction()), available API commands of the system under test
-% MILInstructions :: sets:set(instruction()), MIL instructions to be used as part of exploration
-% Observers :: sets:set(atom()), Observers to be registered
-% NumRuns :: number of exploration runs
-% Length :: number of steps per run
-% 
-% [Returns]
-% Runs :: [{pos_integer(), history()}]
--spec explore(pid(), atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer()) -> [{pos_integer(), history()}].
+%% @doc Same as {@link explore/7} but without specifying a timeout.
+-spec explore(TestEngine::pid(), SUTModule::atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer()) -> [{pos_integer(), history()}].
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length) ->
     gen_server:call(TestEngine,
         {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, infinity).
+
+%% @doc Orders the test engine to explore a given SUTModule with a given Scheduler.
+%% 
+%% SUTModules are expected to implement the {@link sut_module. SUTModule behaviour}.
+%% @param SUTModule  Name of the SUTModule to be used.
+%% @param Config The test config represented as a map from atom to config value.
+%% @param MILInstructions MIL Instructions to be used as part of the exploration.
+%% @param NumRuns The number of test runs to be performed.
+%% @param Length The length (number of steps) for each test run.
+%% @returns A list of the perfomed runs (see {@link run(). run()} datatype).
 -spec explore(pid(), atom(), any(), [#abstract_instruction{}], pos_integer(), pos_integer(), pos_integer() | infinity) -> [{pos_integer(), history()}].
 explore(TestEngine, SUTModule, Config, MILInstructions, NumRuns, Length, Timeout) ->
     gen_server:call(TestEngine,
         {explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, Timeout).
 
+%%%%%%%%%%
 %% gen_server callbacks
+%%%%%%%%%%
+
+%% @hidden
 -spec init([atom(), ...]) -> {'ok', #state{}}.
 init([SUTModule, Scheduler]) ->
     init([SUTModule, Scheduler, scheduler_vanilla_fifo]);
@@ -49,7 +60,6 @@ init([SUTModule, Scheduler, BootstrapScheduler, Config]) ->
     Persist = case {maps:get(persist, Config, false), os:getenv("MIL_MNESIA_DIR", "undef")} of
         {false, "undef"} -> false;
         {true, "undef"} ->
-            % persistence requested but no db was given -> use default dir "_build/Mnesia_DB"
             mnesia_functions:setup_db(),
             true;
         {_, _Dir} ->
@@ -64,9 +74,11 @@ init([SUTModule, Scheduler, BootstrapScheduler, Config]) ->
         persist = Persist
     }}.
 
+%% @hidden
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
+%% @hidden
 -spec handle_call({explore, {atom(), #{}, [atom()], 0 | pos_integer(), 0 | pos_integer()}}, _, #state{}) -> {'reply', [{pos_integer(), history()}], #state{}}.
 handle_call({explore, {SUTModule, Config, MILInstructions, NumRuns, Length}}, _From, State) ->
     RunIds = lists:seq(State#state.next_id, State#state.next_id+NumRuns-1),
@@ -82,17 +94,21 @@ handle_call(Msg,_From, State) ->
     erlang:error("[~p] unhandled call ~p from ~p", [?MODULE, Msg]),
     {stop, unhandled_call, State}.
 
+%% @hidden
 handle_info(Info, State) ->
     io:format("[~p] received info: ~p~n", [?MODULE, Info]),
     {noreply, State}.
 
+%% @hidden
 terminate(Reason, _State) ->
     io:format("[Test Engine] Terminating. Reason: ~p~n", [Reason]),
     ok.
 
-%%% internal functions
+%%%%%%%%%%%%
+% internal functions
+%%%%%%%%%%%%
 
-% perform a single exploration run
+% @doc Performs a single exploration run.
 -spec explore1(atom(), #{atom() => any()}, [#abstract_instruction{}], integer(), #state{}, integer()) -> history().
 explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     %io:format("[Test Engine] Exploring 1 with Config: ~p, MILInstructions: ~p~n",[Config, MILInstructions]),
@@ -199,6 +215,7 @@ explore1(SUTModule, Config, MILInstructions, Length, State, RunId) ->
     % return run
     Run.
 
+%% @doc Runs an instruction, either on the MIL or the SUT.
 -spec run_instruction(#instruction{}, #state{}) -> ok.
 run_instruction(#instruction{module = Module, function = Function, args = Args}, _State) ->
 %%    only spawn new processes for instructions which are not executed by MIL
@@ -215,6 +232,8 @@ run_instruction(#instruction{module = Module, function = Function, args = Args},
     end,
     ok.
 
+%% @doc Collects the program state for a given SUT module.
+%% Program state includes everything that the MIL knows + the concrete and abstract state of the SUT. In order for the latter to be included, {@link sut_module:abstract_state_mod()} has to be defined.
 -spec collect_state(atom()) -> #prog_state{}.
 collect_state(SUTModule) ->
     Observers = gen_event:which_handlers(om),
@@ -241,7 +260,9 @@ collect_state(SUTModule) ->
         abstract_state = AbstractState
     }.
 
-% stores a test run on disk in an mnesia database
+% @doc Stores a test run on disk in an mnesia database.
+% 
+% In order for this to work, an mnesia node has to be running. Normally, <b> this is done automatically when the test engine is started by calling {@link mnesia_functions:setup_db()} </b>.
 -spec store_run(history(), atom(), #{atom() => any()}) -> ok.
 -dialyzer({no_return, store_run/3}).
 store_run(Run, Scheduler, Config) -> 
@@ -258,6 +279,7 @@ store_run(Run, Scheduler, Config) ->
         }) end,
     mnesia:activity(transaction, F).
 
+%% @doc Reads the value of an observable property.
 -spec read_property(atom()) -> [{nonempty_string(), boolean()}].
 read_property(Observer) ->
     Result = gen_event:call(om, Observer, get_result),
@@ -268,7 +290,7 @@ read_property(Observer) ->
             maps:to_list(Map))
     end.
 
-%% does the bootstrapping with the according scheduler and returns initial part of history
+%% @doc Does the bootstrapping with the according scheduler and returns initial part of history.
 -spec bootstrap_w_scheduler(#state{}, atom(), atom(), history(), [atom()]) -> history().
 bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MILInstructions) ->
 %%    idea:
@@ -279,6 +301,7 @@ bootstrap_w_scheduler(State, SUTModule, BootstrapScheduler, History, MILInstruct
     % per step: choose instruction, execute and collect result
     bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, SUTModule, MILInstructions).
 
+%% @hidden
 -spec bootstrap_w_scheduler_loop(_, history(), #state{}, atom(), atom(), [atom()]) -> history().
 bootstrap_w_scheduler_loop(ReplyRef, History, State, BootstrapScheduler, SUTModule, MILInstructions) ->
     receive

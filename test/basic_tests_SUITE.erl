@@ -9,7 +9,7 @@
 -include_lib("stdlib/include/assert.hrl").
 -include_lib("sched_event.hrl").
 
--define(ObserverManager, {global, om}).
+-define(ObserverManager, om).
 
 -export([all/0,
   mil_naive_scheduler_test/1,
@@ -31,7 +31,7 @@ all() -> [
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
   % create observer manager
-  {ok, _} = gen_event:start({global, om}),
+  {ok, _} = gen_event:start({local,om}),
   Config.
 
 end_per_suite(_Config) ->
@@ -55,18 +55,18 @@ end_per_testcase(_, Config) ->
 
 mil_naive_scheduler_test(_Config) ->
 %%  initiate Scheduler, MIL and ETH
-  {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  {ok, _MIL} = message_interception_layer:start_link(),
+  {ok, Scheduler} = scheduler_naive:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
 %%  start and register dummy senders and receivers
-  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
-  {ok, DummySender2} = dummy_sender:start(ds2, MIL),
-  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
-  {ok, DummyReceiver2} = dummy_receiver:start(dr2, MIL),
-  message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
-  message_interception_layer:register_with_name(MIL, ds2, DummySender2, dummy_sender),
-  message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
-  message_interception_layer:register_with_name(MIL, dr2, DummyReceiver2, dummy_receiver),
+  {ok, DummySender1} = dummy_sender:start(ds1),
+  {ok, DummySender2} = dummy_sender:start(ds2),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1),
+  {ok, DummyReceiver2} = dummy_receiver:start(dr2),
+  message_interception_layer:register_with_name(ds1, DummySender1, dummy_sender),
+  message_interception_layer:register_with_name(ds2, DummySender2, dummy_sender),
+  message_interception_layer:register_with_name(dr1, DummyReceiver1, dummy_receiver),
+  message_interception_layer:register_with_name(dr2, DummyReceiver2, dummy_receiver),
 %%  start the CTH
   commands_transfer_helper:start(CTH),
 %%  send the messages
@@ -86,18 +86,18 @@ mil_naive_scheduler_test(_Config) ->
 
 mil_naive_same_payload_scheduler_test(_Config) ->
 %%  initiate Scheduler, MIL and ETH
-  {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive_same_payload:start(MIL, 1),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  {ok, _MIL} = message_interception_layer:start_link(),
+  {ok, Scheduler} = scheduler_naive_same_payload:start(1),
+  {ok, CTH} = commands_transfer_helper:start_link( Scheduler),
 %%  start and register dummy senders and receivers
-  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
-  {ok, DummySender2} = dummy_sender:start(ds2, MIL),
-  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
-  {ok, DummyReceiver2} = dummy_receiver:start(dr2, MIL),
-  message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
-  message_interception_layer:register_with_name(MIL, ds2, DummySender2, dummy_sender),
-  message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
-  message_interception_layer:register_with_name(MIL, dr2, DummyReceiver2, dummy_receiver),
+  {ok, DummySender1} = dummy_sender:start(ds1),
+  {ok, DummySender2} = dummy_sender:start(ds2),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1),
+  {ok, DummyReceiver2} = dummy_receiver:start(dr2),
+  message_interception_layer:register_with_name(ds1, DummySender1, dummy_sender),
+  message_interception_layer:register_with_name(ds2, DummySender2, dummy_sender),
+  message_interception_layer:register_with_name(dr1, DummyReceiver1, dummy_receiver),
+  message_interception_layer:register_with_name(dr2, DummyReceiver2, dummy_receiver),
 %%  start the CTH
   commands_transfer_helper:start(CTH),
 %%  send the messages
@@ -117,14 +117,14 @@ mil_naive_same_payload_scheduler_test(_Config) ->
 
 mil_drop_tests(_Config) ->
 %%  initiate Scheduler, MIL and ETH
-  {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive_dropping:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  {ok, _MIL} = message_interception_layer:start_link(),
+  {ok, Scheduler} = scheduler_naive_dropping:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
 %%  start and register dummy senders and receivers
-  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
-  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
-  message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
-  message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1),
+  {ok, DummySender1} = dummy_sender:start(ds1),
+  message_interception_layer:register_with_name(ds1, DummySender1, dummy_sender),
+  message_interception_layer:register_with_name(dr1, DummyReceiver1, dummy_receiver),
 %%  start the CTH
   commands_transfer_helper:start(CTH),
 %%  send the messages
@@ -140,14 +140,14 @@ mil_drop_tests(_Config) ->
 mil_trans_crash_test(_Config) ->
 %%  TODO: add deterministic case where second queue is also erased
 %%  initiate Scheduler, MIL and ETH
-  {ok, MIL} = message_interception_layer:start(),
-  {ok, Scheduler} = scheduler_naive_transient_fault:start(MIL),
-  {ok, CTH} = commands_transfer_helper:start_link(MIL, Scheduler),
+  {ok, _MIL} = message_interception_layer:start_link(),
+  {ok, Scheduler} = scheduler_naive_transient_fault:start(),
+  {ok, CTH} = commands_transfer_helper:start_link(Scheduler),
 %%  start and register dummy senders and receivers
-  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
-  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
-  message_interception_layer:register_with_name(MIL, ds1, DummySender1, dummy_sender),
-  message_interception_layer:register_with_name(MIL, dr1, DummyReceiver1, dummy_receiver),
+  {ok, DummyReceiver1} = dummy_receiver:start(dr1),
+  {ok, DummySender1} = dummy_sender:start(ds1),
+  message_interception_layer:register_with_name(ds1, DummySender1, dummy_sender),
+  message_interception_layer:register_with_name(dr1, DummyReceiver1, dummy_receiver),
 %%  start the CTH
   commands_transfer_helper:start(CTH),
 %%  send the messages
@@ -158,23 +158,6 @@ mil_trans_crash_test(_Config) ->
   %%  check the length of history
   HistoryOfEvents = gen_event:call(?ObserverManager, mil_observer_template, get_length_history),
   ?assert(HistoryOfEvents == 17).
-
-%%mil_duplicate_test(_Config) ->
-%%  TODO: add deterministic case where second queue is also erased
-%%  {ok, Scheduler} = scheduler_naive_duplicate_msg:start(5),
-%%  {ok, MIL} = message_interception_layer:start(Scheduler),
-%%  gen_server:cast(Scheduler, {register_message_interception_layer, MIL}),
-%%  {ok, DummyReceiver1} = dummy_receiver:start(dr1, MIL),
-%%  {ok, DummySender1} = dummy_sender:start(ds1, MIL),
-%%  gen_server:cast(MIL, {register, {dr1, DummyReceiver1, dummy_receiver}}),
-%%  gen_server:cast(MIL, {register, {ds1, DummySender1, dummy_sender}}),
-%%  gen_server:cast(MIL, {start}),
-%%%%  send the messages
-%%  send_N_messages_with_interval(MIL, 10, ds1, dr1, 75),
-%%  timer:sleep(2500),
-%%  ReceivedMessages1 = gen_server:call(DummyReceiver1, {get_received_payloads}),
-%%  assert_equal(ReceivedMessages1, [10,9,8,7,6,5,5,4,3,2,1,0]).
-%%
 
 %% HELPERS
 

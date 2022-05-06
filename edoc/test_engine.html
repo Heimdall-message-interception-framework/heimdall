@@ -1,0 +1,101 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module test_engine</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module test_engine</h1>
+<ul class="index"><li><a href="#description">Description</a></li><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>The test engine functions as a root module controlling the message interception layer, scheduler and system under test.
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>.</p>
+<p><b>Authors:</b> Julian Haas (<a href="mailto:jhaas@mpi-sws.org"><tt>jhaas@mpi-sws.org</tt></a>), Felix Stutz (<a href="mailto:fstutz@mpi-sws.org"><tt>fstutz@mpi-sws.org</tt></a>).</p>
+
+<h2><a name="description">Description</a></h2>The test engine functions as a root module controlling the message interception layer, scheduler and system under test.
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-run">run()</a></h3>
+<p><tt>run() = {pos_integer() | 0, <a href="#type-history">history()</a>}</tt></p>
+<p>  a test-run, consisting of an id and a history</p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#bootstrap_w_scheduler-5">bootstrap_w_scheduler/5*</a></td><td>Does the bootstrapping with the according scheduler and returns initial part of history.</td></tr>
+<tr><td valign="top"><a href="#collect_state-1">collect_state/1*</a></td><td>Collects the program state for a given SUT module.</td></tr>
+<tr><td valign="top"><a href="#explore-6">explore/6</a></td><td>Same as <a docgen-rel="seemfa" docgen-href="#explore/7" href="#explore-7"><code>explore/7</code></a> but without specifying a timeout.</td></tr>
+<tr><td valign="top"><a href="#explore-7">explore/7</a></td><td>Orders the test engine to explore a given SUTModule with a given Scheduler.</td></tr>
+<tr><td valign="top"><a href="#explore1-6">explore1/6*</a></td><td>Performs a single exploration run.</td></tr>
+<tr><td valign="top"><a href="#read_property-1">read_property/1*</a></td><td>Reads the value of an observable property.</td></tr>
+<tr><td valign="top"><a href="#run_instruction-2">run_instruction/2*</a></td><td>Runs an instruction, either on the MIL or the SUT.</td></tr>
+<tr><td valign="top"><a href="#store_run-3">store_run/3*</a></td><td>Stores a test run on disk in an mnesia database.</td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="bootstrap_w_scheduler-5">bootstrap_w_scheduler/5 *</a></h3>
+<div class="spec">
+<p><tt>bootstrap_w_scheduler(State::#state{runs = [<a href="#type-run">run()</a>], next_id = 0 | pos_integer(), bootstrap_scheduler = atom(), scheduler = atom(), sut_module = atom(), persist = boolean()}, SUTModule::atom(), BootstrapScheduler::atom(), History::<a href="#type-history">history()</a>, MILInstructions::[atom()]) -&gt; <a href="#type-history">history()</a></tt><br></p>
+<p> </p>
+</div><p>Does the bootstrapping with the according scheduler and returns initial part of history.</p>
+
+<h3 class="function"><a name="collect_state-1">collect_state/1 *</a></h3>
+<div class="spec">
+<p><tt>collect_state(SUTModule::atom()) -&gt; #prog_state{}</tt><br></p>
+<p> </p>
+</div><p>Collects the program state for a given SUT module.
+  Program state includes everything that the MIL knows + the concrete and abstract state of the SUT. In order for the latter to be included, <a docgen-rel="seetype" docgen-href="sut_module#abstract_state_mod/0" href="sut_module.html#type-abstract_state_mod"><code>sut_module:abstract_state_mod()</code></a> has to be defined.</p>
+
+<h3 class="function"><a name="explore-6">explore/6</a></h3>
+<div class="spec">
+<p><tt>explore(TestEngine::pid(), SUTModule::atom(), Config::any(), MILInstructions::[#abstract_instruction{}], NumRuns::pos_integer(), Length::pos_integer()) -&gt; [{pos_integer(), <a href="#type-history">history()</a>}]</tt><br></p>
+<p> </p>
+</div><p>Same as <a docgen-rel="seemfa" docgen-href="#explore/7" href="#explore-7"><code>explore/7</code></a> but without specifying a timeout.</p>
+
+<h3 class="function"><a name="explore-7">explore/7</a></h3>
+<div class="spec">
+<p><tt>explore(TestEngine::pid(), SUTModule::atom(), Config::any(), MILInstructions::[#abstract_instruction{}], NumRuns::pos_integer(), Length::pos_integer(), Timeout::pos_integer() | infinity) -&gt; [{pos_integer(), <a href="#type-history">history()</a>}]</tt><br></p>
+<p><tt>SUTModule</tt>: Name of the SUTModule to be used.<br>
+<tt>Config</tt>: The test config represented as a map from atom to config value.<br>
+<tt>MILInstructions</tt>: MIL Instructions to be used as part of the exploration.<br>
+<tt>NumRuns</tt>: The number of test runs to be performed.<br>
+<tt>Length</tt>: The length (number of steps) for each test run.<br>
+</p>
+<p>returns: A list of the perfomed runs (see <a docgen-rel="seetype" docgen-href="#run/0" href="#type-run">run()</a> datatype).</p>
+</div><p><p>Orders the test engine to explore a given SUTModule with a given Scheduler.</p>
+ 
+  SUTModules are expected to implement the <a docgen-rel="seeerl" docgen-href="sut_module" href="sut_module.html">SUTModule behaviour</a>.</p>
+
+<h3 class="function"><a name="explore1-6">explore1/6 *</a></h3>
+<div class="spec">
+<p><tt>explore1(SUTModule::atom(), Config::#{atom() =&gt; any()}, MILInstructions::[#abstract_instruction{}], Length::integer(), State::#state{runs = [<a href="#type-run">run()</a>], next_id = 0 | pos_integer(), bootstrap_scheduler = atom(), scheduler = atom(), sut_module = atom(), persist = boolean()}, RunId::integer()) -&gt; <a href="#type-history">history()</a></tt><br></p>
+<p> </p>
+</div><p>Performs a single exploration run.</p>
+
+<h3 class="function"><a name="read_property-1">read_property/1 *</a></h3>
+<div class="spec">
+<p><tt>read_property(Observer::atom()) -&gt; [{nonempty_string(), boolean()}]</tt><br></p>
+<p> </p>
+</div><p>Reads the value of an observable property.</p>
+
+<h3 class="function"><a name="run_instruction-2">run_instruction/2 *</a></h3>
+<div class="spec">
+<p><tt>run_instruction(Instruction::#instruction{}, State::#state{runs = [<a href="#type-run">run()</a>], next_id = 0 | pos_integer(), bootstrap_scheduler = atom(), scheduler = atom(), sut_module = atom(), persist = boolean()}) -&gt; ok</tt><br></p>
+<p> </p>
+</div><p>Runs an instruction, either on the MIL or the SUT.</p>
+
+<h3 class="function"><a name="store_run-3">store_run/3 *</a></h3>
+<div class="spec">
+<p><tt>store_run(Run::<a href="#type-history">history()</a>, Scheduler::atom(), Config::#{atom() =&gt; any()}) -&gt; ok</tt><br></p>
+<p> </p>
+</div><p><p>Stores a test run on disk in an mnesia database.</p>
+
+ In order for this to work, an mnesia node has to be running. Normally, <b> this is done automatically when the test engine is started by calling <a docgen-rel="seetype" docgen-href="mnesia_functions#setup_db/0" href="mnesia_functions.html#type-setup_db"><code>mnesia_functions:setup_db()</code></a> </b>.</p>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

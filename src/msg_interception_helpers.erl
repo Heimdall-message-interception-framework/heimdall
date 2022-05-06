@@ -11,17 +11,13 @@
 
 -include("observer_events.hrl").
 
--define(ObserverManager, {global, om}).
+-define(ObserverManager, om).
 
 %% API
 -export([get_readable_time/0, remove_firstmatch/2, get_message_interception_layer/0, submit_sched_event/1]).
 
 get_message_interception_layer() ->
-  MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-  case MIL of
-      undefined -> erlang:throw("no message interception layer registered");
-      _ -> MIL
-  end.
+  message_interception_layer.
 
 submit_sched_event(Event) ->
   gen_event:sync_notify(?ObserverManager, {sched, Event}).

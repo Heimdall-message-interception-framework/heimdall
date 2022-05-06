@@ -40,7 +40,7 @@ all() -> [
 init_per_suite(Config) ->
   logger:set_primary_config(level, info),
   % create observer manager
-  {ok, _} = gen_event:start({global, om}),
+  {ok, _} = gen_event:start({local,om}),
   Config.
 
 end_per_suite(_Config) ->

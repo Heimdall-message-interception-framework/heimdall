@@ -8,11 +8,9 @@
 
 -behaviour(gen_server).
 
--export([start/2]).
+-export([start/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2,
   code_change/3]).
-
--define(SERVER, ?MODULE).
 
 -record(state, {
   received_messages = [] :: [{From::pid(), To::pid(), Msg::any()}]
@@ -22,10 +20,10 @@
 %%% Spawning and gen_server implementation
 %%%===================================================================
 
-start(Name, MIL) ->
-  gen_server:start_link({local, Name}, ?MODULE, [MIL], []).
+start(Name) ->
+  gen_server:start_link({local, Name}, ?MODULE, [], []).
 
-init([_MIL]) ->
+init([]) ->
   {ok, #state{}}.
 
 handle_call({get_received_payloads}, _From, State = #state{}) ->

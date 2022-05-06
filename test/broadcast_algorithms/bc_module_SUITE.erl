@@ -3,7 +3,7 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--export([all/0, test_engine/1, test_module/1, init_per_testcase/2, test_scheduler_bfs/1, test_scheduler_pct/1]).
+-export([all/0, test_engine/1, test_module/1, init_per_testcase/2, init_per_suite/1, end_per_suite/1, test_scheduler_bfs/1, test_scheduler_pct/1]).
 
 all() -> [
    test_module,
@@ -13,6 +13,9 @@ all() -> [
 ].
 
 init_per_suite(Config) ->
+  logger:set_primary_config(level, debug),
+  LogConf = #{config => #{file => "./MIL_log.log"}, level => debug},
+  logger:add_handler(myhandler, logger_std_h, LogConf),
   Config.
 
 end_per_suite(_Config) ->
@@ -27,10 +30,9 @@ end_per_testcase(_, Config) ->
 test_module(InitialConfig) ->
     % bc_module:bootstrap(),
     % start ObserverManager and MIL
-    {ok, OM} = gen_event:start({global,om}),
+    {ok, OM} = gen_event:start({local,om}),
     {ok, MIL} = message_interception_layer:start(),
     erlang:monitor(process, MIL),
-    application:set_env(sched_msg_interception_erlang, msg_int_layer, MIL),
     Conf = maps:from_list([{num_processes, 20}, {bc_type, best_effort_broadcast_paper}]
         ++ InitialConfig),
     {ok, BCMod} = bc_module:start_link(Conf),

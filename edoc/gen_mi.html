@@ -1,0 +1,290 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module gen_mi</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module gen_mi</h1>
+<ul class="index"><li><a href="#types">Data Types</a></li><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+
+<h2><a name="types">Data Types</a></h2>
+
+<h3 class="typedecl"><a name="type-debug_flag">debug_flag()</a></h3>
+<p><tt>debug_flag() = trace | log | statistics | debug | {logfile, string()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-emgr_name">emgr_name()</a></h3>
+<p><tt>emgr_name() = {local, atom()} | {global, term()} | {via, Module::module(), Name::term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-linkage">linkage()</a></h3>
+<p><tt>linkage() = monitor | link | nolink</tt></p>
+
+
+<h3 class="typedecl"><a name="type-option">option()</a></h3>
+<p><tt>option() = {timeout, timeout()} | {debug, [<a href="#type-debug_flag">debug_flag()</a>]} | {hibernate_after, timeout()} | {spawn_opt, [<a href="/home/julian/projects/phd/MPI/stdlib/doc/proc_lib.html#type-spawn_option">proc_lib:spawn_option()</a>]}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-options">options()</a></h3>
+<p><tt>options() = [<a href="#type-option">option()</a>]</tt></p>
+
+
+<h3 class="typedecl"><a name="type-request_id">request_id()</a></h3>
+<p><tt>request_id() = term()</tt></p>
+
+
+<h3 class="typedecl"><a name="type-server_ref">server_ref()</a></h3>
+<p><tt>server_ref() = pid() | atom() | {atom(), node()} | {global, term()} | {via, module(), term()}</tt></p>
+
+
+<h3 class="typedecl"><a name="type-start_ret">start_ret()</a></h3>
+<p><tt>start_ret() = {ok, pid()} | {ok, {pid(), reference()}} | ignore | {error, term()}</tt></p>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#call-3">call/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#call-4">call/4</a></td><td></td></tr>
+<tr><td valign="top"><a href="#check_response-2">check_response/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#debug_options-2">debug_options/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_call-4">do_call/4*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_for_proc-2">do_for_proc/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_send_request-3">do_send_request/3*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_spawn-5">do_spawn/5*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#do_spawn-6">do_spawn/6*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#format_status_header-2">format_status_header/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_node-1">get_node/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_parent-0">get_parent/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_proc_name-1">get_proc_name/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#hibernate_after-1">hibernate_after/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_it-6">init_it/6</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_it-7">init_it/7</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init_it2-7">init_it2/7*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#monitor_return-1">monitor_return/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#name-1">name/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#name_to_pid-1">name_to_pid/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#receive_response-2">receive_response/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#register_name-1">register_name/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#reply-2">reply/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#send_request-3">send_request/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#spawn_opts-1">spawn_opts/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start-5">start/5</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start-6">start/6</a></td><td></td></tr>
+<tr><td valign="top"><a href="#stop-1">stop/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#stop-3">stop/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#timeout-1">timeout/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#unregister_name-1">unregister_name/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#wait_response-2">wait_response/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#where-1">where/1*</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="call-3">call/3</a></h3>
+<div class="spec">
+<p><tt>call(Process, Label, Request) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="call-4">call/4</a></h3>
+<div class="spec">
+<p><tt>call(Process, Label, Request, Timeout) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="check_response-2">check_response/2</a></h3>
+<div class="spec">
+<p><tt>check_response(RequestId::term(), Key::<a href="#type-request_id">request_id()</a>) -&gt; {reply, Reply::term()} | no_reply | {error, {term(), <a href="#type-server_ref">server_ref()</a>}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="debug_options-2">debug_options/2</a></h3>
+<div class="spec">
+<p><tt>debug_options(Name, Opts) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="do_call-4">do_call/4 *</a></h3>
+<div class="spec">
+<p><tt>do_call(Process, Label, Request, Timeout) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="do_for_proc-2">do_for_proc/2 *</a></h3>
+<div class="spec">
+<p><tt>do_for_proc(Pid, Fun) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="do_send_request-3">do_send_request/3 *</a></h3>
+<div class="spec">
+<p><tt>do_send_request(Process, Label, Request) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="do_spawn-5">do_spawn/5 *</a></h3>
+<div class="spec">
+<p><tt>do_spawn(GenMod, X2, Mod, Args, Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="do_spawn-6">do_spawn/6 *</a></h3>
+<div class="spec">
+<p><tt>do_spawn(GenMod, X2, Name, Mod, Args, Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="format_status_header-2">format_status_header/2</a></h3>
+<div class="spec">
+<p><tt>format_status_header(TagLine, Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_node-1">get_node/1 *</a></h3>
+<div class="spec">
+<p><tt>get_node(Process) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_parent-0">get_parent/0</a></h3>
+<div class="spec">
+<p><tt>get_parent() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_proc_name-1">get_proc_name/1</a></h3>
+<div class="spec">
+<p><tt>get_proc_name(Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="hibernate_after-1">hibernate_after/1</a></h3>
+<div class="spec">
+<p><tt>hibernate_after(Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="init_it-6">init_it/6</a></h3>
+<div class="spec">
+<p><tt>init_it(GenMod, Starter, Parent, Mod, Args, Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="init_it-7">init_it/7</a></h3>
+<div class="spec">
+<p><tt>init_it(GenMod, Starter, Parent, Name, Mod, Args, Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="init_it2-7">init_it2/7 *</a></h3>
+<div class="spec">
+<p><tt>init_it2(GenMod, Starter, Parent, Name, Mod, Args, Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="monitor_return-1">monitor_return/1 *</a></h3>
+<div class="spec">
+<p><tt>monitor_return(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="name-1">name/1</a></h3>
+<div class="spec">
+<p><tt>name(Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="name_to_pid-1">name_to_pid/1 *</a></h3>
+<div class="spec">
+<p><tt>name_to_pid(Name) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="receive_response-2">receive_response/2</a></h3>
+<div class="spec">
+<p><tt>receive_response(RequestId::<a href="#type-request_id">request_id()</a>, Timeout::timeout()) -&gt; {reply, Reply::term()} | timeout | {error, {term(), <a href="#type-server_ref">server_ref()</a>}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="register_name-1">register_name/1 *</a></h3>
+<div class="spec">
+<p><tt>register_name(LN) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="reply-2">reply/2</a></h3>
+<div class="spec">
+<p><tt>reply(X1, Reply) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="send_request-3">send_request/3</a></h3>
+<div class="spec">
+<p><tt>send_request(Name::<a href="#type-server_ref">server_ref()</a>, Label::term(), Request::term()) -&gt; <a href="#type-request_id">request_id()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="spawn_opts-1">spawn_opts/1 *</a></h3>
+<div class="spec">
+<p><tt>spawn_opts(Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="start-5">start/5</a></h3>
+<div class="spec">
+<p><tt>start(GenMod::module(), LinkP::<a href="#type-linkage">linkage()</a>, Mod::module(), Args::term(), Options::<a href="#type-options">options()</a>) -&gt; <a href="#type-start_ret">start_ret()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="start-6">start/6</a></h3>
+<div class="spec">
+<p><tt>start(GenMod::module(), LinkP::<a href="#type-linkage">linkage()</a>, Name::<a href="#type-emgr_name">emgr_name()</a>, Mod::module(), Args::term(), Options::<a href="#type-options">options()</a>) -&gt; <a href="#type-start_ret">start_ret()</a></tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="stop-1">stop/1</a></h3>
+<div class="spec">
+<p><tt>stop(Process) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="stop-3">stop/3</a></h3>
+<div class="spec">
+<p><tt>stop(Process, Reason, Timeout) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="timeout-1">timeout/1 *</a></h3>
+<div class="spec">
+<p><tt>timeout(Options) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="unregister_name-1">unregister_name/1</a></h3>
+<div class="spec">
+<p><tt>unregister_name(Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="wait_response-2">wait_response/2</a></h3>
+<div class="spec">
+<p><tt>wait_response(RequestId::<a href="#type-request_id">request_id()</a>, Timeout::timeout()) -&gt; {reply, Reply::term()} | timeout | {error, {term(), <a href="#type-server_ref">server_ref()</a>}}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="where-1">where/1 *</a></h3>
+<div class="spec">
+<p><tt>where(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

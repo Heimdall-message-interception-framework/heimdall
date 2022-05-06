@@ -1,0 +1,116 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module html_output</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module html_output</h1>
+<ul class="index"><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#args_to_string-2">args_to_string/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#cit_to_string-2">cit_to_string/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#cits_to_string-2">cits_to_string/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#erlang_to_string-1">erlang_to_string/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#history_to_html-3">history_to_html/3*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#html_postfix-0">html_postfix/0*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#html_prefix-1">html_prefix/1*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#instruction_to_string-2">instruction_to_string/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#nodelist_to_string-2">nodelist_to_string/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#output_html-3">output_html/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#pid_to_name-2">pid_to_name/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#step_to_html-2">step_to_html/2*</a></td><td></td></tr>
+<tr><td valign="top"><a href="#write_file-2">write_file/2*</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="args_to_string-2">args_to_string/2 *</a></h3>
+<div class="spec">
+<p><tt>args_to_string(Args, PidNameMap) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="cit_to_string-2">cit_to_string/2 *</a></h3>
+<div class="spec">
+<p><tt>cit_to_string(Command, PidNameMap) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="cits_to_string-2">cits_to_string/2 *</a></h3>
+<div class="spec">
+<p><tt>cits_to_string(CommandsInTransit, PidNameMap) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="erlang_to_string-1">erlang_to_string/1 *</a></h3>
+<div class="spec">
+<p><tt>erlang_to_string(Erl::any()) -&gt; string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="history_to_html-3">history_to_html/3 *</a></h3>
+<div class="spec">
+<p><tt>history_to_html(Name::nonempty_string(), History::<a href="#type-history">history()</a>, PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; nonempty_string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="html_postfix-0">html_postfix/0 *</a></h3>
+<div class="spec">
+<p><tt>html_postfix() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="html_prefix-1">html_prefix/1 *</a></h3>
+<div class="spec">
+<p><tt>html_prefix(Title) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="instruction_to_string-2">instruction_to_string/2 *</a></h3>
+<div class="spec">
+<p><tt>instruction_to_string(Instruction::#instruction{}, PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; nonempty_string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="nodelist_to_string-2">nodelist_to_string/2 *</a></h3>
+<div class="spec">
+<p><tt>nodelist_to_string(Nodes::[pid()], PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; nonempty_string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="output_html-3">output_html/3</a></h3>
+<div class="spec">
+<p><tt>output_html(Filename::nonempty_string(), History::<a href="#type-history">history()</a>, PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; ok</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="pid_to_name-2">pid_to_name/2 *</a></h3>
+<div class="spec">
+<p><tt>pid_to_name(Pid::pid(), PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; nonempty_string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="step_to_html-2">step_to_html/2 *</a></h3>
+<div class="spec">
+<p><tt>step_to_html(X1::{integer(), {#instruction{}, #prog_state{}}}, PidNameMap::#{pid() =&gt; nonempty_string()}) -&gt; nonempty_string()</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="write_file-2">write_file/2 *</a></h3>
+<div class="spec">
+<p><tt>write_file(String::binary() | maybe_improper_list(binary() | maybe_improper_list(any(), binary() | []) | char(), binary() | []), Filename::atom() | binary() | [atom() | [any()] | char()]) -&gt; ok | {error, atom()}</tt><br></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

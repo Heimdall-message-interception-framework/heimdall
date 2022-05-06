@@ -11,19 +11,19 @@
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, terminate/2]).
 
 -record(state, {
-	beb			:: bc_types:broadcast(), % best effort broadcast used for sending
+	beb			:: broadcast(), % best effort broadcast used for sending
 	deliver_to	:: pid(), % receiver
 	self		:: nonempty_string(), % name of local process
 	max_mid	= 0 :: non_neg_integer(), % counter for ids
 	local_delivered :: sets:set()
 }).
 
--spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
+-spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_message()) -> any().
+-spec broadcast(broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
 	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).
@@ -41,13 +41,13 @@ init([LL, Name, R]) ->
 handle_call({broadcast, Msg}, _From, State) ->
 	%%% OBS
 	Event = {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg
 		}
 	}},
-    gen_event:sync_notify({global,om}, Event),
+    gen_event:sync_notify(om, Event),
 	%%% SBO
 
 	% deliver locally
@@ -58,8 +58,8 @@ handle_call({broadcast, Msg}, _From, State) ->
 	% broadcast to everyone
 	best_effort_broadcast_paper:broadcast(State#state.beb, {State#state.self, Mid, Msg}),
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -80,20 +80,20 @@ handle_info({deliver, {Sender, Mid, Msg}}, State) ->
 			State#state.deliver_to ! {deliver, Msg},
 			%%% OBS
 			Event = {process, #obs_process_event{
-				process = State#state.self,
+				process = self(),
 				event_type = bc_delivered_event,
 				event_content = #bc_delivered_event{
 					message = Msg
 				}
 			}},
-			gen_event:sync_notify({global,om}, Event),
+			gen_event:sync_notify(om, Event),
 			%%% SBO
 			NewDelivered = sets:add_element({Sender, Mid}, State#state.local_delivered),
 			% beb-broadcast again
 			best_effort_broadcast_paper:broadcast(State#state.beb, {Sender,Mid,Msg}),
 			%%% OBS
-			gen_event:sync_notify({global,om}, {process, #obs_process_event{
-				process = State#state.self,
+			gen_event:sync_notify(om, {process, #obs_process_event{
+				process = self(),
 				event_type = bc_broadcast_event,
 				event_content = #bc_broadcast_event{
 					message = Msg

@@ -11,7 +11,7 @@
     armed = true :: boolean(),
     update_target = undefined :: any(),
     history_of_events = queue:new() :: queue:queue(),
-    process_to_log_map = maps:new() :: maps:maps(any(), array:array())
+    process_to_log_map = maps:new() :: #{any() => array:array()}
 %%    TO ADD: add more fields
     }).
 

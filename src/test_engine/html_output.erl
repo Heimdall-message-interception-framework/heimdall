@@ -1,17 +1,17 @@
 -module(html_output).
 -include("test_engine_types.hrl").
 
--export([output_html/2]).
+-export([output_html/3]).
 
 %%====================================================================
 %% API functions
 %%====================================================================
 
--spec output_html(nonempty_string(), history()) -> 'ok'.
-output_html(Filename, History) ->
+-spec output_html(nonempty_string(), history(), #{pid() => nonempty_string()}) -> 'ok'.
+output_html(Filename, History, PidNameMap) ->
     % offload to separate process
     spawn(fun() -> 
-        Html = history_to_html(Filename, History),
+        Html = history_to_html(Filename, History, PidNameMap),
         write_file(Html, Filename ++ ".html") end
     ),
     ok.
@@ -22,18 +22,18 @@ output_html(Filename, History) ->
 
 -spec write_file(binary() | maybe_improper_list(binary() | maybe_improper_list(any(), binary() | []) | char(), binary() | []), atom() | binary() | [atom() | [any()] | char()]) -> 'ok' | {'error', atom()}.
 write_file(String, Filename) ->
-    io:format("[~p] Writing file ~p~n", [?MODULE, Filename]),
+    logger:info("[~p] Writing file ~p~n", [?MODULE, Filename]),
     file:write_file(Filename, unicode:characters_to_binary(String)).
 
 -spec erlang_to_string(any()) -> string().
 erlang_to_string(Erl) -> 
     io_lib:format("~p", [Erl]).
 
--spec history_to_html(nonempty_string(), history()) -> nonempty_string().
-history_to_html(Name, History) ->
+-spec history_to_html(nonempty_string(), history(), #{pid() => nonempty_string()}) -> nonempty_string().
+history_to_html(Name, History, PidNameMap) ->
     Steps = lists:reverse(lists:seq(0, length(History) -1)),
     HistoryWithSteps = lists:reverse(lists:zip(Steps, History)),
-    StepsAsHTML = lists:map(fun(S) -> step_to_html(S) end, HistoryWithSteps),
+    StepsAsHTML = lists:map(fun(S) -> step_to_html(S, PidNameMap) end, HistoryWithSteps),
     AbstractStates = lists:foldl(fun({_Inst, State}, Acc) ->
         sets:add_element(State#prog_state.abstract_state, Acc) end, sets:new(), History),
     NumAbstractStates = sets:size(AbstractStates),
@@ -56,10 +56,10 @@ history_to_html(Name, History) ->
         </ul>" ++
     html_postfix().
 
--spec step_to_html({integer(), {#instruction{}, #prog_state{}}}) -> nonempty_string().
+-spec step_to_html({integer(), {#instruction{}, #prog_state{}}}, #{pid() => nonempty_string()}) -> nonempty_string().
 step_to_html({Index, {#instruction{module= Module, function=Function, args= Args}, #prog_state{properties = Properties,
     commands_in_transit = CommandsInTransit,
-    timeouts = Timeouts, nodes = Nodes, crashed = Crashed, abstract_state = AbstractState}}}) ->
+    timeouts = Timeouts, nodes = Nodes, crashed = Crashed, abstract_state = AbstractState}}}, PidNameMap) ->
         % format command name
         CommandName = io_lib:format("~p: ~p", [Module, Function]),
         % format properties
@@ -85,59 +85,57 @@ step_to_html({Index, {#instruction{module= Module, function=Function, args= Args
     "<div class=\"collapse\" id=\""++ Detailsname ++"\">
                 <div class=\"card card-body details\">
                     <span class=\"state-property\">Instruction</span>
-                    "++ instruction_to_string(#instruction{module= Module, function=Function, args= Args}) ++"
+                    "++ instruction_to_string(#instruction{module= Module, function=Function, args= Args}, PidNameMap) ++"
                     <span class=\"state-property\">Properties</span>
                     "++ erlang_to_string(Properties) ++ "
                     <span class=\"state-property\">Commands in Transit</span>
-                    "++ cits_to_string(lists:reverse(CommandsInTransit)) ++"
+                    "++ cits_to_string(lists:reverse(CommandsInTransit), PidNameMap) ++"
                     <span class=\"state-property\">Nodes</span>
-                    "++ nodelist_to_string(Nodes) ++"
+                    "++ nodelist_to_string(Nodes, PidNameMap) ++"
                     <span class=\"state-property\">Timeouts</span>
                     "++ erlang_to_string(Timeouts) ++"
                     <span class=\"state-property\">Crashes</span>
-                    "++ nodelist_to_string(Crashed) ++"
+                    "++ nodelist_to_string(Crashed, PidNameMap) ++"
                     <span class=\"state-property\">Abstract State</span>
                     "++ erlang_to_string(AbstractState) ++"
                 </div>
             </div>
 </li>".
 
-instruction_to_string(#instruction{module= Module, function=Function, args= Args}) -> 
-        "<span class=\"instruction\">"++erlang_to_string(Module) ++ ":" ++ erlang_to_string(Function) ++ args_to_string(Args) ++"</span>".
+-spec instruction_to_string(#instruction{}, #{pid() => nonempty_string()}) -> nonempty_string().
+instruction_to_string(#instruction{module= Module, function=Function, args= Args}, PidNameMap) -> 
+        "<span class=\"instruction\">"++erlang_to_string(Module) ++ ":" ++ erlang_to_string(Function) ++ args_to_string(Args, PidNameMap) ++"</span>".
 
-args_to_string(Args) ->
+args_to_string(Args, PidNameMap) ->
     Strings = lists:map(fun(A) -> case is_pid(A) of
-        true -> pid_to_name(A);
+        true -> pid_to_name(A, PidNameMap);
         false -> erlang_to_string(A) end end, Args),
     "(" ++ string:join(Strings, ", ") ++ ")".
 
-pid_to_name(Pid) ->
-    case ets:lookup(pid_name_table, Pid) of
-        [ ] -> erlang_to_string(Pid);
-        [{_, Name}] ->
+-spec pid_to_name(pid(), #{pid() => nonempty_string()}) -> nonempty_string().
+pid_to_name(Pid, PidNameMap) ->
+    case maps:get(Pid, PidNameMap, undefined) of
+        undefined -> erlang_to_string(Pid);
+        Name ->
             Out = "<em class=\"pid\" title=\""++ erlang_to_string(Pid)++"\" data-bs-toggle=\"tooltip\" data-bs-placement=\"top\" data-pid=\""++ erlang_to_string(Pid)++"\" data-name=\""++ Name ++ "\">" ++ Name ++"</em>",
             io_lib:format("~s", [Out]) end.
 
-cits_to_string(CommandsInTransit) ->
+cits_to_string(CommandsInTransit, PidNameMap) ->
     "<ul>" ++
-    lists:map(fun(C) -> "<li><span class=\"comm-in-trans\">" ++ cit_to_string(C) ++ "</span></li>"end,
+    lists:map(fun(C) -> "<li><span class=\"comm-in-trans\">" ++ cit_to_string(C, PidNameMap) ++ "</span></li>"end,
         CommandsInTransit) ++
     "</ul>".
 
 % {ID::any(), From::pid(), To::pid(), Module::atom(), Function::atom(), ListArgs::list(any())}
-cit_to_string({ID, From, To, erlang, send, [_PIDTo, Msg]}) ->
-    "[" ++ erlang_to_string(ID) ++ "] " ++ erlang_to_string(From) ++ " → " ++ erlang_to_string(To) ++ ": " ++ erlang_to_string(Msg);
-cit_to_string(Command) ->
+cit_to_string({ID, From, To, erlang, send, [_PIDTo, Msg]}, PidNameMap) ->
+    "[" ++ erlang_to_string(ID) ++ "] " ++ pid_to_name(From, PidNameMap) ++ " → " ++ pid_to_name(To, PidNameMap) ++ ": " ++ erlang_to_string(Msg);
+cit_to_string(Command, _PidNameMap) ->
     erlang_to_string(Command).
 
-nodelist_to_string(Nodes) ->
-    Formatted = lists:map(fun(C) -> "<li>" ++ node_to_string(C) ++ "</li>" end, Nodes),
+-spec nodelist_to_string([pid()], #{pid() => nonempty_string()}) -> nonempty_string().
+nodelist_to_string(Nodes, PidNameMap) ->
+    Formatted = lists:map(fun(C) -> "<li>" ++ pid_to_name(C, PidNameMap) ++ "</li>" end, Nodes),
     "<ul class=\"nodelist\">" ++ Formatted ++ "</ul>".
-
-node_to_string({_Name, PID}) ->
-    pid_to_name(PID).
-    
-
 
 html_prefix(Title) ->
 "<!doctype html>

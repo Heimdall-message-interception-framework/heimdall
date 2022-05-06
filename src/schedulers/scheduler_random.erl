@@ -9,207 +9,118 @@
 -module(scheduler_random).
 -author("fms").
 
--behaviour(gen_server).
+-behaviour(scheduler).
 
 -include("test_engine_types.hrl").
+
+-export([get_kind_of_instruction/1, produce_sched_instruction/4, produce_timeout_instruction/2, start/1, init/1, update_state/2, choose_instruction/4, stop/1, produce_node_connection_instruction/3]).
+
+%% SCHEDULER specific: state and parameters for configuration
+
+-record(state, {}).
 
 -define(ShareSUT_Instructions, 3).
 -define(ShareSchedInstructions, 15).
 -define(ShareTimeouts, 1).
 -define(ShareNodeConnections, 1).
 
+-type kind_of_sched_instruction() :: execute | duplicate | drop.
 -define(ShareMsgCmdExec, 20).
 -define(ShareMsgCmdDup, 1).
 -define(ShareMsgCmdDrop, 1).
 
--record(state, {}).
+%%% BOILERPLATE for scheduler behaviour
 
--type kind_of_instruction() :: sut_instruction | sched_instruction | timeout_instruction | node_connection_instruction.
--type kind_of_sched_instruction() :: execute | duplicate | drop.
+start(InitialConfig) ->
+  Config = maps:put(sched_name, ?MODULE, InitialConfig),
+  scheduler:start(Config).
 
--export([start_link/1, start/1, init/1, handle_call/3, handle_cast/2, terminate/2]).
--export([choose_instruction/5]).
+-spec choose_instruction(Scheduler :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
+choose_instruction(Scheduler, SUTModule, SchedInstructions, History) ->
+  scheduler:choose_instruction(Scheduler, SUTModule, SchedInstructions, History).
 
-%%% API
--spec start_link(_) -> {'ok', pid()}.
-start_link(Config) ->
-  gen_server:start_link({local, ?MODULE}, ?MODULE, [Config], []).
+-define(ListKindInstructionsShare, lists:flatten(
+  [lists:duplicate(?ShareSUT_Instructions, sut_instruction),
+    lists:duplicate(?ShareSchedInstructions, sched_instruction),
+    lists:duplicate(?ShareTimeouts, timeout_instruction),
+    lists:duplicate(?ShareNodeConnections, node_connection_instruction)])).
 
-start(Config) ->
-  gen_server:start({local, ?MODULE}, ?MODULE, [Config], []).
+-spec get_kind_of_instruction(#state{}) -> kind_of_instruction().
+get_kind_of_instruction(_State) ->
+  lists:nth(rand:uniform(length(?ListKindInstructionsShare)), ?ListKindInstructionsShare).
 
--spec choose_instruction(Scheduler :: pid(), MIL :: pid(), SUTModule :: atom(), [#abstract_instruction{}], history()) -> #instruction{}.
-choose_instruction(Scheduler, MIL, SUTModule, SchedInstructions, History) ->
-  %io:format("[~p] Choosing Instruction, History is: ~p~n", [?MODULE, History]),
-  gen_server:call(Scheduler, {choose_instruction, MIL, SUTModule, SchedInstructions, History}).
-
-%% gen_server callbacks
+%%% SCHEDULER callback implementations
 
 init([_Config]) ->
   {ok, #state{}}.
 
-handle_call({choose_instruction, MIL, SUTModule, SchedInstructions, History}, _From, State = #state{}) ->
-  #prog_state{commands_in_transit = CommInTransit,
-    timeouts = Timeouts,
-    nodes = Nodes,
-    crashed = Crashed} = getLastStateOfHistory(History),
-  Result = get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed),
-  {reply, Result, State};
-handle_call(_Request, _From, State = #state{}) ->
-  erlang:throw("unhandled call"),
-  {reply, ok, State}.
-
-handle_cast(_Request, State = #state{}) ->
-  {noreply, State}.
-
-terminate(_Reason, _State = #state{}) ->
+stop(_State) ->
   ok.
 
-%% internal functions
-
--spec getLastStateOfHistory(history()) -> #prog_state{}.
-getLastStateOfHistory([]) ->
-  #prog_state{};
-getLastStateOfHistory([{_Cmd, State} | _Tail]) ->
-  State.
-
--spec get_next_instruction(pid(), atom(), [#abstract_instruction{}], _, _, _, _) -> #instruction{}.
-get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed) ->
-%%  Crashed are the transient ones
-  KindInstruction = get_kind_of_instruction(),
-  NextInstruction = case KindInstruction of
-    sut_instruction ->
-      produce_sut_instruction(SUTModule);
-    sched_instruction ->
-      produce_sched_instruction(MIL, SchedInstructions, CommInTransit);
-    timeout_instruction ->
-      produce_timeout_instruction(MIL, Timeouts);
-    node_connection_instruction ->
-      produce_node_connection_instruction(MIL, Nodes, Crashed)
-  end,
-%%  in case we produced a kind which was not possible, we simply retry
-%%  TODO: improve this by checking first whether sched_instruction or timeout_instruction is possible
-  case NextInstruction of
-    undefined -> get_next_instruction(MIL, SUTModule, SchedInstructions, CommInTransit, Timeouts, Nodes, Crashed);
-    ActualInstruction -> ActualInstruction
-  end.
-
--spec produce_sut_instruction(atom()) -> #instruction{}.
-produce_sut_instruction(SUTInstructionModule) ->
-  % choose random abstract instruction
-  Instructions = SUTInstructionModule:get_instructions(),
-  Instr = lists:nth(rand:uniform(length(Instructions)), Instructions),
-  SUTInstructionModule:generate_instruction(Instr).
-
--spec produce_sched_instruction(any(), any(), any()) -> #instruction{} | undefined.
-produce_sched_instruction(_MIL, _SchedInstructions, CommInTransit) when CommInTransit == [] ->
-  undefined;
-produce_sched_instruction(MIL, _SchedInstructions, CommInTransit) when CommInTransit /= [] ->
+-spec produce_sched_instruction(any(), any(), list(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit == [] ->
+  {undefined, State};
+produce_sched_instruction(_SchedInstructions, CommInTransit, _Timeouts, State) when CommInTransit /= [] ->
 %%  first decide which action to take
   KindSchedInstruction = get_kind_of_sched_instruction(),
-  case KindSchedInstruction of
+  Instruction = case KindSchedInstruction of
     execute ->
-      Command = choose_from_list(CommInTransit),
-      Args = get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = exec_msg_command, args = ArgsWithMIL};
+      Command = helpers_scheduler:choose_from_list(CommInTransit),
+      Args = helpers_scheduler:get_args_from_command_for_mil(Command),
+      #instruction{module = message_interception_layer, function = exec_msg_command, args = Args};
     duplicate ->  % always choose the first command
       [Command | _] = CommInTransit,
-      Args = get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = duplicate_msg_command, args = ArgsWithMIL};
+      Args = helpers_scheduler:get_args_from_command_for_mil(Command),
+      #instruction{module = message_interception_layer, function = duplicate_msg_command, args = Args};
     drop -> % always choose the first command
       [Command  | _] = CommInTransit,
-      Args = get_args_from_command_for_mil(Command),
-      ArgsWithMIL = [MIL | Args],
-      #instruction{module = message_interception_layer, function = drop_msg_command, args = ArgsWithMIL}
-  end.
+      Args = helpers_scheduler:get_args_from_command_for_mil(Command),
+      #instruction{module = message_interception_layer, function = drop_msg_command, args = Args}
+  end,
+  {Instruction, State}.
 
--spec produce_timeout_instruction(any(), any()) -> #instruction{} | undefined.
-produce_timeout_instruction(_MIL, Timeouts) when Timeouts == [] ->
-  undefined;
-produce_timeout_instruction(MIL, Timeouts) when Timeouts /= [] ->
-  TimeoutToFire = choose_from_list(Timeouts), % we also prioritise the ones in front
+-spec produce_timeout_instruction(any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_timeout_instruction(Timeouts, State) when Timeouts == [] ->
+  {undefined, State};
+produce_timeout_instruction(Timeouts, State) when Timeouts /= [] ->
+  TimeoutToFire = helpers_scheduler:choose_from_list(Timeouts), % we also prioritise the ones in front
   {TimerRef, _, Proc, _, _, _, _} = TimeoutToFire, % this is too bad to pattern-match
-  Args = [MIL, Proc, TimerRef],
-  #instruction{module = message_interception_layer, function = fire_timeout, args = Args}.
+  Args = [Proc, TimerRef],
+  {#instruction{module = message_interception_layer, function = fire_timeout, args = Args}, State}.
 
--spec produce_node_connection_instruction(any(), any(), any()) -> #instruction{} | undefined.
-produce_node_connection_instruction(MIL, Nodes, Crashed) ->
-  case Crashed of
-    [] -> produce_crash_instruction(MIL, Nodes);
+-spec produce_node_connection_instruction(any(), any(), #state{}) -> {#instruction{} | undefined, #state{}}.
+produce_node_connection_instruction(Nodes, Crashed, State) ->
+  Instruction = case Crashed of
+    [] -> produce_crash_instruction(Nodes);
     _ -> case rand:uniform() * 2 < 1 of
-           true -> produce_crash_instruction(MIL, Nodes);
-           false -> produce_rejoin_instruction(MIL, Crashed)
+           true -> produce_crash_instruction(Nodes);
+           false -> produce_rejoin_instruction(Crashed)
          end
-  end.
+  end,
+  {Instruction, State}.
 
-produce_crash_instruction(MIL, Nodes) ->
+produce_crash_instruction(Nodes) ->
 %%  currently, we do not distinguish between transient and permanent crash
   NumberOfNodes = length(Nodes),
   NumberOfNodeToCrash = trunc(rand:uniform() * NumberOfNodes) + 1,
   NodeToCrash = lists:nth(NumberOfNodeToCrash, Nodes),
-  Args = [MIL, NodeToCrash],
+  Args = [NodeToCrash],
   #instruction{module = message_interception_layer, function = transient_crash, args = Args}.
 
-produce_rejoin_instruction(MIL, Crashed) ->
+produce_rejoin_instruction(Crashed) ->
   NumberOfCrashedNodes = length(Crashed),
   NumberOfNodeToRejoin = trunc(rand:uniform() * NumberOfCrashedNodes) + 1,
   NodeToRejoin = lists:nth(NumberOfNodeToRejoin, Crashed),
-  Args = [MIL, NodeToRejoin],
+  Args = [NodeToRejoin],
   #instruction{module = message_interception_layer, function = rejoin, args = Args}.
-
--spec get_kind_of_instruction() -> kind_of_instruction().
-get_kind_of_instruction() ->
-  SumShares = ?ShareSUT_Instructions + ?ShareSchedInstructions + ?ShareTimeouts + ?ShareNodeConnections,
-  RandomNumber = rand:uniform() * SumShares,
-  case RandomNumber < ?ShareSUT_Instructions of
-    true -> sut_instruction;
-    false -> case RandomNumber < ?ShareSUT_Instructions + ?ShareSchedInstructions of
-               true -> sched_instruction;
-               false ->
-                 case RandomNumber < ?ShareSUT_Instructions + ?ShareSchedInstructions + ?ShareTimeouts  of
-                   true -> timeout_instruction;
-                   false -> node_connection_instruction
-                 end
-             end
-  end.
 
 -spec get_kind_of_sched_instruction() -> kind_of_sched_instruction().
 get_kind_of_sched_instruction() ->
-  SumShares = ?ShareMsgCmdExec + ?ShareMsgCmdDup + ?ShareMsgCmdDrop,
-  RandomNumber = rand:uniform() * SumShares,
-  case RandomNumber < ?ShareMsgCmdExec of
-    true -> execute;
-    false -> case RandomNumber < ?ShareMsgCmdExec + ?ShareMsgCmdDup of
-               true -> duplicate;
-               false -> drop
-             end
-  end.
+  List = lists:flatten(
+    [lists:duplicate(?ShareMsgCmdExec, execute),
+      lists:duplicate(?ShareMsgCmdDup, duplicate),
+      lists:duplicate(?ShareMsgCmdDrop, drop)]
+  ),
+  lists:nth(rand:uniform(length(List)), List).
 
-choose_from_list(List) ->
-  choose_from_list(List, 5).
-choose_from_list(List, Trials) when Trials == 0 ->
-%%  pick first; possible since the list cannot be empty
-  [Element | _] = List,
-  Element;
-choose_from_list(List, Trials) when Trials > 0 ->
-  HelperFunction = fun(X, Acc) ->
-    case Acc of
-      undefined -> RandomNumber = rand:uniform() * 4, % 75% chance to pick first command
-                    case RandomNumber < 3 of
-                      true -> X;
-                      false -> undefined
-                    end;
-      Cmd       -> Cmd
-    end
-    end,
-  MaybeElement = lists:foldl(HelperFunction, undefined, List),
-  case MaybeElement of
-    undefined -> choose_from_list(List, Trials-1);
-    Element -> Element
-  end.
-
-get_args_from_command_for_mil(Command) ->
-  {Id, From, To, _Module, _Function, _Args} = Command,
-  [Id, From, To].
+update_state(State, _CommInTransit) -> State.

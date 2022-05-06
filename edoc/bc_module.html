@@ -1,0 +1,166 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>Module bc_module</title>
+<link rel="stylesheet" type="text/css" href="stylesheet.css" title="EDoc">
+</head>
+<body bgcolor="white">
+<div class="navbar"><a name="#navbar_top"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<hr>
+
+<h1>Module bc_module</h1>
+<ul class="index"><li><a href="#index">Function Index</a></li><li><a href="#functions">Function Details</a></li></ul>
+
+<p><b>Behaviours:</b> <a href="gen_server.html"><tt>gen_server</tt></a>, <a href="sut_module.html"><tt>sut_module</tt></a>.</p>
+
+<h2><a name="index">Function Index</a></h2>
+<table width="100%" border="1" cellspacing="0" cellpadding="2" summary="function index"><tr><td valign="top"><a href="#abstract_state_mod-0">abstract_state_mod/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#bootstrap_w_scheduler-1">bootstrap_w_scheduler/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#bootstrap_w_scheduler-2">bootstrap_w_scheduler/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#bootstrap_wo_scheduler-0">bootstrap_wo_scheduler/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#bootstrap_wo_scheduler-1">bootstrap_wo_scheduler/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#generate_instruction-1">generate_instruction/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#generate_instruction-2">generate_instruction/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_instructions-0">get_instructions/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_observers-0">get_observers/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#get_properties-0">get_properties/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#handle_call-3">handle_call/3</a></td><td></td></tr>
+<tr><td valign="top"><a href="#handle_cast-2">handle_cast/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#handle_info-2">handle_info/2</a></td><td></td></tr>
+<tr><td valign="top"><a href="#init-1">init/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#needs_bootstrap_w_scheduler-0">needs_bootstrap_w_scheduler/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start-1">start/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#start_link-1">start_link/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#stop_sut-0">stop_sut/0</a></td><td></td></tr>
+<tr><td valign="top"><a href="#stop_sut-1">stop_sut/1</a></td><td></td></tr>
+<tr><td valign="top"><a href="#terminate-2">terminate/2</a></td><td></td></tr>
+</table>
+
+<h2><a name="functions">Function Details</a></h2>
+
+<h3 class="function"><a name="abstract_state_mod-0">abstract_state_mod/0</a></h3>
+<div class="spec">
+<p><tt>abstract_state_mod() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="bootstrap_w_scheduler-1">bootstrap_w_scheduler/1</a></h3>
+<div class="spec">
+<p><tt>bootstrap_w_scheduler(TestEngine) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="bootstrap_w_scheduler-2">bootstrap_w_scheduler/2</a></h3>
+<div class="spec">
+<p><tt>bootstrap_w_scheduler(Pid, TestEngine) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="bootstrap_wo_scheduler-0">bootstrap_wo_scheduler/0</a></h3>
+<div class="spec">
+<p><tt>bootstrap_wo_scheduler() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="bootstrap_wo_scheduler-1">bootstrap_wo_scheduler/1</a></h3>
+<div class="spec">
+<p><tt>bootstrap_wo_scheduler(Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="generate_instruction-1">generate_instruction/1</a></h3>
+<div class="spec">
+<p><tt>generate_instruction(AbstrInstruction) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="generate_instruction-2">generate_instruction/2</a></h3>
+<div class="spec">
+<p><tt>generate_instruction(Pid, AbstrInstruction) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_instructions-0">get_instructions/0</a></h3>
+<div class="spec">
+<p><tt>get_instructions() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_observers-0">get_observers/0</a></h3>
+<div class="spec">
+<p><tt>get_observers() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="get_properties-0">get_properties/0</a></h3>
+<div class="spec">
+<p><tt>get_properties() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="handle_call-3">handle_call/3</a></h3>
+<div class="spec">
+<p><tt>handle_call(X1, From, State) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="handle_cast-2">handle_cast/2</a></h3>
+<div class="spec">
+<p><tt>handle_cast(Req, State) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="handle_info-2">handle_info/2</a></h3>
+<div class="spec">
+<p><tt>handle_info(Msg, State) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="init-1">init/1</a></h3>
+<div class="spec">
+<p><tt>init(X1) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="needs_bootstrap_w_scheduler-0">needs_bootstrap_w_scheduler/0</a></h3>
+<div class="spec">
+<p><tt>needs_bootstrap_w_scheduler() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="start-1">start/1</a></h3>
+<div class="spec">
+<p><tt>start(Config) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="start_link-1">start_link/1</a></h3>
+<div class="spec">
+<p><tt>start_link(Config::term()) -&gt; {ok, pid()}</tt><br></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="stop_sut-0">stop_sut/0</a></h3>
+<div class="spec">
+<p><tt>stop_sut() -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="stop_sut-1">stop_sut/1</a></h3>
+<div class="spec">
+<p><tt>stop_sut(Pid) -&gt; any()</tt></p>
+<p> </p>
+</div>
+
+<h3 class="function"><a name="terminate-2">terminate/2</a></h3>
+<div class="spec">
+<p><tt>terminate(Reason, State) -&gt; any()</tt></p>
+<p> </p>
+</div>
+<hr>
+
+<div class="navbar"><a name="#navbar_bottom"></a><table width="100%" border="0" cellspacing="0" cellpadding="2" summary="navigation bar"><tr><td><a href="overview-summary.html" target="overviewFrame">Overview</a></td><td><a href="http://www.erlang.org/"><img src="erlang.png" align="right" border="0" alt="erlang logo"></a></td></tr></table></div>
+<p><i>Generated by EDoc</i></p>
+</body>
+</html>

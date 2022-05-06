@@ -16,12 +16,12 @@
 	self		:: nonempty_string() % name of local process
 }).
 
--spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', bc_types:broadcast()}.
+-spec start_link(pid(), nonempty_string(), pid()) -> {'error', _} | {'ok', broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
 	gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_message()) -> any().
+-spec broadcast(broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
 	% erlang:display("Broadcasting: ~p~n", [Msg]),
 	gen_server:call(B, {broadcast, Msg}).
@@ -38,8 +38,8 @@ init([LL, Name, R]) ->
 -spec handle_call({'broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({broadcast, Msg}, _From, State) ->
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -50,21 +50,21 @@ handle_call({broadcast, Msg}, _From, State) ->
 	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
 	Event = {process, #obs_process_event{
-		process = State#state.self,
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg
 		}
 	}},
-    gen_event:sync_notify({global,om}, Event),
+    gen_event:sync_notify(om, Event),
 	%%% SBO
 	% broadcast to everyone
 	LL = State#state.link_layer,
 	{ok, AllNodes} = link_layer:all_nodes(LL),
 	[link_layer:send(LL, {deliver, Msg}, self(), Node) || Node <- AllNodes, Node =/= self()],
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -77,8 +77,8 @@ handle_call({broadcast, Msg}, _From, State) ->
 handle_info({deliver, Msg}, State) ->
 	State#state.deliver_to ! {deliver, Msg},
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg

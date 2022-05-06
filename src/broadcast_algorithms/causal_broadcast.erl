@@ -11,18 +11,18 @@
 -export([handle_call/3, handle_cast/2, handle_info/2, init/1, terminate/2]).
 
 -record(state,
-        {rb :: bc_types:broadcast(), % best effort broadcast used for sending
+        {rb :: broadcast(), % best effort broadcast used for sending
          deliver_to :: pid(), % receiver
          self :: nonempty_string(), % name of local process
          pending :: sets:set(), % pending messages
          vc :: vectorclock:vectorclock()}). % local vectorclock
 
--spec start_link(pid(), atom(), pid()) -> {error, _} | {ok, bc_types:broadcast()}.
+-spec start_link(pid(), atom(), pid()) -> {error, _} | {ok, broadcast()}.
 start_link(LinkLayer, ProcessName, RespondTo) ->
     gen_server:start_link(?MODULE, [LinkLayer, ProcessName, RespondTo], []).
 
 % broadcasts a message to all other nodes that we are connected to
--spec broadcast(bc_types:broadcast(), bc_message()) -> any().
+-spec broadcast(broadcast(), bc_message()) -> any().
 broadcast(B, Msg) ->
     % erlang:display("Broadcasting: ~p~n", [Msg]),
     gen_server:call(B, {rco_broadcast, Msg}).
@@ -39,8 +39,8 @@ init([LL, Name, R]) ->
 -spec handle_call({'rco_broadcast', bc_message()}, _, #state{}) -> {'reply', 'ok', #state{}}.
 handle_call({rco_broadcast, Msg}, _From, State) ->
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_delivered_event,
 		event_content = #bc_delivered_event{
 			message = Msg
@@ -53,8 +53,8 @@ handle_call({rco_broadcast, Msg}, _From, State) ->
 	% broadcast to everyone
 	reliable_broadcast:broadcast(State#state.rb, {State#state.self, State#state.vc, Msg}),
 	%%% OBS
-    gen_event:sync_notify({global,om}, {process, #obs_process_event{
-		process = State#state.self,
+    gen_event:sync_notify(om, {process, #obs_process_event{
+		process = self(),
 		event_type = bc_broadcast_event,
 		event_content = #bc_broadcast_event{
 			message = Msg
@@ -93,8 +93,8 @@ deliver_pending(State, Pending, Vc) ->
                 sets:fold(fun({Q, _, M}, VcA) ->
                              State#state.deliver_to ! {deliver, M},
                             %%% OBS
-                            gen_event:sync_notify({global,om}, {process, #obs_process_event{
-                                process = State#state.self,
+                            gen_event:sync_notify(om, {process, #obs_process_event{
+                                process = self(),
                                 event_type = bc_delivered_event,
                                 event_content = #bc_delivered_event{
                                     message = M

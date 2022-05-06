@@ -26,12 +26,7 @@ init([]) ->
 % this message will be delivered via the MIL after a configurable delay
 handle_call({send, Data, From, To}, _From, State) ->
     %%% MIL
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    case MIL of
-        undefined -> erlang:error("MIL not found in env!");
-        _ -> 
-            message_interception_layer:msg_command(MIL, From, To, erlang, send, [To, Data])
-    end,
+    message_interception_layer:msg_command(From, To, erlang, send, [To, Data]),
     % Node ! Data,
     %%% LIM
     {reply, ok, State};
@@ -40,12 +35,7 @@ handle_call({send, Data, From, To}, _From, State) ->
 handle_call({register, Name, R}, _From, State) ->
     NewName = unicode:characters_to_list(Name) ++ "_LL",
     %%% MIL
-    MIL = application:get_env(sched_msg_interception_erlang, msg_int_layer, undefined),
-    case MIL of
-        undefined -> erlang:error("MIL not found in env!");
-        _ -> 
-            message_interception_layer:register_with_name(MIL, NewName, R, ll_client_node)
-    end,
+    message_interception_layer:register_with_name(NewName, R, ll_client_node),
     %%% LIM
     {reply, ok, State#state{nodes=[R|State#state.nodes]}};
 % returns all nodes currently on the link layer

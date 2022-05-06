@@ -21,7 +21,7 @@
 -type process_identifier() :: pid() | atom() | nonempty_string().
 
 -record(obs_process_event, {
-  process :: process_identifier(),
+  process :: pid(),
   event_type :: atom(),
   event_content :: any()
 }).

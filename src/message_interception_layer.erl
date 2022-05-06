@@ -239,6 +239,9 @@ handle_call({fire_to, {Proc, TimerRef}}, _From, State = #state{}) ->
       erlang:throw("tried to fire disabled timeout")
   end;
 %%
+handle_call({get_commands}, _From, State = #state{}) ->
+  {reply, State#state.list_commands_in_transit, State};
+%%
 handle_call({get_transient_crashed_nodes}, _From, #state{transient_crashed_nodes = TransientCrashedNodes} = State) ->
   {reply, TransientCrashedNodes, State};
 %%

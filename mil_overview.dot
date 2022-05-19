@@ -1,0 +1,22 @@
+digraph MIL_overview {
+    rankdir="TB"
+    ratio=0.6
+    ee [shape="component", label="Exploration Engine"];
+    mil [label="Message Interception\nLayer" shape="component"];
+    o [label="Observers" shape="hexagon"];
+    sut [label="SUT" shape="ellipse"];
+    sm [label="SUT Module" shape="hexagon"];
+    db [label="MNESIA DB", shape="cylinder"];
+    subgraph {
+        rank = "same";
+        sm; o;
+    }
+    ee -> mil [label="starts per run"];
+    ee -> {sm} [label="starts per run"];
+    ee -> o [label="collects state from"]
+    sm -> sut [label="bootstraps and issues\ncommands to"];
+    sut -> o [label="sends update\nevents to"];
+    sm -> o [label="lists"];
+    sut -> mil [label="sends messages via"];
+    ee -> db [label="persists runs in"];
+}

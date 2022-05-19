@@ -15,7 +15,7 @@ This project maintains its code in several sub-projects:
 ## Concepts
 
 - MIL: TODO
-- Test/Exploration-Engine: TODO
+- Test/Exploration-Engine: The exploration engine is used to run and orchestrate tests on a specific SUT. It issues API calls to the SUT and collects messages and program states after each step.
 - SUT-Module: TODO
 - Schedulers: TODO
 
@@ -39,19 +39,12 @@ $ git clone git-rts@gitlab.mpi-sws.org:fstutz/sched_msg_interception_erlang.git
 ### Testcases That Work
 to be run on top level of the respective repo
 
-`sched_msg_interception_erlang`:
-
     rebar3 ct --suite=test/basic_tests_SUITE.erl
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_non_mi_tests_SUITE.erl
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_mi_tests_SUITE.erl
     rebar3 ct --suite=test/broadcast_algorithms/broadcast_tests_SUITE.erl
     rebar3 ct --suite=test/raft/raft_observer_tests_SUITE.erl
     rebar3 ct --suite=test/broadcast_algorithms/bc_module_SUITE.erl
-
-`ra_kv_store`:
-
-    rebar3 ct --suite=test/store_SUITE.erl 
-    rebar3 ct --suite=test/ra-kv-store_module_SUITE.erl // currently with verbose output
 
 ### Testcases That do NOT Work (yet again)
 

@@ -15,8 +15,8 @@ digraph MIL_overview {
     ee -> {sm} [label="starts per run"];
     ee -> o [label="collects state from"]
     sm -> sut [label="bootstraps and issues\ncommands to"];
-    sut -> o [label="sends update\nevents to"];
+    sut -> o [label="sends update\nevents to", style="dashed"];
     sm -> o [label="lists"];
-    sut -> mil [label="sends messages via"];
+    sut -> mil [label="sends messages and\ntimeouts via"];
     ee -> db [label="persists runs in"];
 }

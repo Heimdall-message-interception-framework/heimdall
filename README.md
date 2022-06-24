@@ -7,16 +7,18 @@ Message interception and scheduling utilities for Erlang applications.
 
 This project maintains its code in several sub-projects:
 
-- This repository host the **message interception layer (MIL)**. The MIL is used to intercept messages and schedule the delivery of messages in an Erlang program. This repo also includes a test-engine for orchestrating tests that leverage the MIL.
+- This repository host the **message interception layer (MIL)**. The MIL is used to intercept messages and schedule the delivery of messages in an Erlang program. This repo also includes an **exploration engine** for orchestrating tests that leverage the MIL.
 - RA-KV-Store: TODO
 - RA: TODO
 - Broadcast-Algos:
 
 ## Concepts
 
-- MIL: TODO
-- Test/Exploration-Engine: The exploration engine is used to run and orchestrate tests on a specific SUT. It issues API calls to the SUT and collects messages and program states after each step.
-- SUT-Module: TODO
+This section introduces the different modules and concepts which are needed to test an application. In this readme, we try to give a more high-level description. For more in-depth explanations of the source code and the API of the different modules, we provide [edoc](https://www.erlang.org/doc/apps/edoc/chapter.html) in the respective folder.
+
+- **Message Interception Layer (MIL):** The MIL can be used to intercept communication (messages) between Erlang processes. This allows scheduling messages in a user defined way in order to simulate various reordering scenarios that can happen in real systems due to unreliable message delivery. The MIL includes "drop-in" implementations for Erlang's `gen_server`modules, therefore applications which are built using these abstractions can be instrumented to use the MIL with minimal effort. Applications which use Erlang's messaging primitives directly (e.g. the `!` operator) need these calls to be instrumented manually.
+- **Exploration Engine:** The exploration engine is used to run and orchestrate tests on a specific SUT. It issues API calls to the SUT and collects messages and program states after each step. This allows to systematically explore the different possible linearizations in a message-passing program.
+- **SUT-Module:** TODO
 - Schedulers: TODO
 
 ## Usage

@@ -23,11 +23,7 @@ This section introduces the different modules and concepts which are needed to t
 
 ## Usage
 
-### Clone the Repo
-
-```
-$ git clone git-rts@gitlab.mpi-sws.org:fstutz/sched_msg_interception_erlang.git
-```
+After cloning the repository, follow the following steps.
 
 ### Build
 
@@ -41,8 +37,8 @@ $ git clone git-rts@gitlab.mpi-sws.org:fstutz/sched_msg_interception_erlang.git
 
     $ rebar3 dialyzer
 
-### Testcases That Work
-to be run on top level of the respective repo
+### Testcases 
+(to be run on top level of the repository)
 
     rebar3 ct --suite=test/basic_tests_SUITE.erl
     rebar3 ct --suite=test/gen_statem_timeouts/timeout_non_mi_tests_SUITE.erl
@@ -50,8 +46,3 @@ to be run on top level of the respective repo
     rebar3 ct --suite=test/broadcast_algorithms/broadcast_tests_SUITE.erl
     rebar3 ct --suite=test/raft/raft_observer_tests_SUITE.erl
     rebar3 ct --suite=test/broadcast_algorithms/bc_module_SUITE.erl
-
-### Testcases That do NOT Work (yet again)
-
-    $ rebar3 ct --suite=test/replay_tests_SUITE.erl
-we keep them for potential future use but currently, this is not needed for our priority

@@ -1,4 +1,4 @@
-sched_msg_interception_erlang
+Heimdall
 =====
 
 Message interception and scheduling utilities for Erlang applications.
@@ -7,10 +7,10 @@ Message interception and scheduling utilities for Erlang applications.
 
 This project maintains its code in several sub-projects:
 
-- This repository host the **message interception layer (MIL)**. The MIL is used to intercept messages and schedule the delivery of messages in an Erlang program. This repo also includes an **exploration engine** for orchestrating tests that leverage the MIL.
-- RA-KV-Store: TODO
-- RA: TODO
-- Broadcast-Algos:
+This repository hosts the **message interception layer (MIL)**. The MIL is used to intercept messages and schedule the delivery of messages in an Erlang program. This repo also includes an **exploration engine** for orchestrating tests that leverage the MIL.
+
+The first case study is a key-value store based on Raft.
+We instrumented their code which can be found in the respective repositories.
 
 ## Concepts
 
@@ -18,8 +18,8 @@ This section introduces the different modules and concepts which are needed to t
 
 - **Message Interception Layer (MIL):** The MIL can be used to intercept communication (messages) between Erlang processes. This allows scheduling messages in a user defined way in order to simulate various reordering scenarios that can happen in real systems due to unreliable message delivery. The MIL includes "drop-in" implementations for Erlang's `gen_server` modules, therefore applications which are built using these abstractions can be instrumented to use the MIL with minimal effort. Applications which use Erlang's messaging primitives directly (e.g. the `!` operator) need these calls to be instrumented manually.
 - **Exploration Engine:** The exploration engine is used to run and orchestrate tests on a specific SUT. It issues API calls to the SUT and collects messages and program states after each step. This allows to systematically explore the different possible linearizations in a message-passing program.
-- **SUT-Module:** TODO
-- Schedulers: TODO
+- **SUT-Module:** This module encapsulates everything that the test engine needs to know about a specific system/application under test.
+- Schedulers: Our Framework allows to implement various schedulers like PCT or FIFO scheduling but also more complex schedulers that incorporate information about the state of the execution into the decision making.
 
 ## Usage
 
